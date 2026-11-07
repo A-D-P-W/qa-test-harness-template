@@ -1,0 +1,2 @@
+# Keep LF everywhere (Windows checkouts too) so clasp uploads the exact bytes the tests ran on.
+* text=auto eol=lf

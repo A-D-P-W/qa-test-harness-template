@@ -1,0 +1,2 @@
+# Registry order of every landed module (docs/ARCHITECTURE.md). Bundles list a subsequence of it; contract tests load in it.
+# Empty until the project vendors its first module (docs/MODULES.md).

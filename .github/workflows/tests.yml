@@ -1,0 +1,45 @@
+# Every push runs the full release test run + the Apps Script type check.
+# Required for main: the 'main' ruleset requires check "runall" (docs/RULESETS.md).
+# No secrets: clasp credentials never reach CI. Full history + tags (fetch-depth 0): module GUARD (a) compares
+# each module with the last release/v* tag.
+name: tests
+on:
+  push:              # every branch; no pull_request trigger (it would run the same commit twice)
+permissions:
+  contents: read
+jobs:
+  runall:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # 3.10.0 (template GitHub review M2): v6.0.2 runs on node24 (action.yml `using: node24`); v4.2.2 was node20, which
+      # GitHub removed from runners (changelog 2026-09-23). Inputs used here (persist-credentials, fetch-depth) are unchanged.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd   # v6.0.2, pinned by commit
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: FULL test run (PowerShell 7 for deploy.ps1 tests; typecheck tools pinned in tests/typecheck/run.sh)
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          node --version; pwsh --version
+          set -o pipefail
+          # The unfilled template is checked in a scratch copy (tools/template_check.sh: on main it fails two GUARDs by
+          # design until README § Start a project steps 2 and 4 are done). A project made from it runs runall directly.
+          if grep -q '"SET_TO_THE_FIRST_COMMIT_AFTER_CREATING_THE_PROJECT"' tests/workflow_review.json; then
+            PWSH=pwsh FULL=1 bash tools/template_check.sh 2>&1 | tee runall-output.txt
+          else
+            PWSH=pwsh FULL=1 ./runall.sh 2>&1 | tee runall-output.txt
+          fi
+      # Every problem line becomes a check-run annotation, readable through the checks
+      # API without log access (the agent session cannot download job logs).
+      - name: Report problems as annotations
+        if: failure()
+        run: |
+          grep -aE '^(UNEXPECTED|GUARD|VERDICT)|^(STALE|BAD) ENTRY|CRASHED' runall-output.txt | head -40 | while IFS= read -r l; do echo "::error title=runall::${l//%/%25}"; done || true
+      # 3.10.0 (template review M2): NOTICE lines (template drift, review due, (dev) date) become check-run warnings on every
+      # run, so they are readable through the checks API — they never fail the run.
+      - name: Report notices as warnings
+        if: always()
+        run: |
+          grep -a '^NOTICE' runall-output.txt | head -40 | while IFS= read -r l; do echo "::warning title=runall::${l//%/%25}"; done || true

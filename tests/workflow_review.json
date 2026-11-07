@@ -1,0 +1,23 @@
+{
+  "last_review_commit": "SET_TO_THE_FIRST_COMMIT_AFTER_CREATING_THE_PROJECT",
+  "last_review_date": "YYYY-MM-DD",
+  "threshold_commits": 8,
+  "threshold_lines": 400,
+  "paths": [
+    "runall.sh",
+    "tests/",
+    "CLAUDE.md",
+    "appsscript.json",
+    "deploy.ps1",
+    ".clasp.json",
+    ".claspignore",
+    ".gitattributes",
+    ".gitignore",
+    ".github/",
+    "tools/",
+    "deploy/",
+    "docs/",
+    "modules/"
+  ],
+  "note": "Workflow-integrity review is due when commits touching these paths since last_review_commit reach threshold_commits, or the lines they ADD reach threshold_lines. tools/review_count.py excludes only the commits that change last_review_commit (the review records)."
+}

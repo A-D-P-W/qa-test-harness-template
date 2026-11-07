@@ -1,0 +1,4 @@
+# clasp push uploads ONLY the script and its manifest (never tests/, out/, docs).
+**/**
+!App.gs
+!appsscript.json

@@ -1,0 +1,3 @@
+# Allowed failures that are DEPLOYED DESIGN differences (the test describes another configuration than the one deployed).
+# Format: <suite> | <exact failure line>   (an entry that matches nothing fails the run: STALE ENTRY)
+# Adding a line needs the owner's OK (CLAUDE.md § Tests).

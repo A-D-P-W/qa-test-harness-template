@@ -1,0 +1,5 @@
+# Bundle order for this project (ADR-0001 of the template; MailToDrive ADR-0009). tools/bundle.js concatenates these files
+# into the committed root App.gs. Modules first, in registry order (deploy/modules.order), then the project file last.
+# @project App
+# @out App.gs
+src/App.main.gs

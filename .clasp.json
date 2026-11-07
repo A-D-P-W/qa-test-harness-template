@@ -1,0 +1,9 @@
+{
+  "scriptId": "PASTE_THE_LIVE_SCRIPT_ID_IN_A_REVIEWED_COMMIT",
+  "rootDir": "",
+  "scriptExtensions": [".js", ".gs"],
+  "htmlExtensions": [".html"],
+  "jsonExtensions": [".json"],
+  "filePushOrder": [],
+  "skipSubdirectories": true
+}

@@ -1,0 +1,3 @@
+# Allowed failures that are OPEN BUGS or RISK lines, each with its fix version or owner decision after '  #'.
+# Format: <suite> | <exact failure line>  # <fix version or owner decision>
+# An entry that matches nothing fails the run (STALE ENTRY). Adding a line needs the owner's OK (CLAUDE.md § Tests).
