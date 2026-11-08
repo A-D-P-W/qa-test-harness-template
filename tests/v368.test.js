@@ -11,8 +11,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? pass++ : fail++; };
 
 // 3.9.2: only the code the project's own files can reach (tools/reachable.js) — a shared module's function the project
-// never calls does not demand its scope. Without the parser (acorn, installed with the type check) the whole file is
-// checked (stricter, never weaker).
+// never calls does not demand its scope. Without the parser (acorn, installed with the type check) the scope rows check the
+// whole file, but the alias, chain and L100 checks cannot run: that is a FAIL under FULL=1 (release), an INFO otherwise.
 let reach = src, ACORN = null, EXBODIES = [];
 try { const acorn = require(process.env.MTD_ACORN || path.join(process.env.MTD_TC_CACHE || path.join(require('os').homedir(), '.cache', 'mtd-tc'), 'node_modules', 'acorn'));
       // the project whose committed bundle SRC is (any other file, e.g. runall's file-mode copy → whole bundle)
@@ -81,6 +81,7 @@ for (const [re, scopes] of NEEDS) {
 ok(!/\bSession\.(getEffectiveUser|getActiveUser)\s*\(/.test(code), 'no Session user lookup in code (single-account: use MY_ADDRESS)');
 // 3.9.7 workflow review H1: the regex rows see only `Service.` text, so an alias (`const { Events } = Calendar`, `const A = DriveApp`)
 // would hide a call. Every service name in reachable code must be the object of a plain member access (or a typeof operand).
+if (!ACORN && process.env.FULL) ok(false, 'parser (acorn) unavailable: the alias, chain and L100 checks did not run (FULL=1 needs them)');
 if (ACORN) {
   const SERVICES = new Set(['GmailApp', 'Gmail', 'Calendar', 'CalendarApp', 'DriveApp', 'Drive', 'MailApp', 'UrlFetchApp', 'ScriptApp',
     'SpreadsheetApp', 'Sheets', 'DocumentApp', 'Session', 'PropertiesService', 'LockService', 'CacheService', 'People', 'Tasks']);
@@ -103,21 +104,77 @@ if (ACORN) {
   const unrowed = [...chains].filter(c => !NOSCOPE.test(c) && !NEEDS.some(([re]) => re.test(c + '(')) && ![...chains].some(d => d !== c && d.startsWith(c + '.')));
   ok(!unrowed.length, 'every service call in reachable code has a NEEDS row or is known to need no scope (' + chains.size + ' chains)' + (unrowed.length ? ': ' + unrowed.join(', ') : ''));
   ok(!aliases.length, 'no service object is aliased, destructured or passed around in reachable code (the scope rows would not see its calls)' + (aliases.length ? ': ' + aliases.slice(0, 5).join(', ') : ''));
-  // L100 (security review 2026-11-08, driven): a service reached by a COMPUTED name on the global object
-  // (`globalThis['Drive' + 'App']`, `this[k]`) or through eval/Function is never an Identifier, so the alias and chain
-  // checks above cannot see it: each form passed this suite with "oauthScopes": []. Fail closed on all of them.
+  // L100 (security reviews 2026-11-08, driven): a service reached WITHOUT its name in the code is invisible to the rows
+  // and to the alias check above. Each form below passed this suite with "oauthScopes": [] until this rule. The rule:
+  //   A1 any reference to globalThis/self/window/global the file does not declare itself
+  //   A2 any Reflect          A3 eval, and Function except as the right side of instanceof or an operand of === / !==
+  //   A4 this.<Service> anywhere; outside a class body, `this` only as `this.<name>` (not this[...], not bare this)
+  //   A5 .constructor used as a value (allowed: .constructor.name, and === / !== comparisons)
+  // This is a lint against code that reaches a service the manifest does not grant, not a sandbox: the manifest is the
+  // run-time boundary. Known residual: a constructor key built at run time ([].map["constr" + "uctor"]). Known false
+  // positives: ES5 `this` in prototype functions and object-literal methods (write them as class methods).
   const GLOBALS = new Set(['globalThis', 'self', 'window', 'global']);
-  const dynamic = [];
-  (function walk(n, parent, key) { if (!n || typeof n.type !== 'string') return;
-    if (n.type === 'MemberExpression' && n.computed &&
-        (n.object.type === 'ThisExpression' || (n.object.type === 'Identifier' && GLOBALS.has(n.object.name))))
-      dynamic.push((n.object.type === 'ThisExpression' ? 'this' : n.object.name) + '[...]@' + n.start);
-    if (n.type === 'Identifier' && (n.name === 'eval' || n.name === 'Function') &&
-        !(parent && parent.type === 'MemberExpression' && key === 'property' && !parent.computed) &&
-        !(parent && parent.type === 'Property' && key === 'key' && !parent.computed))
-      dynamic.push(n.name + '@' + n.start);
-    for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(x => walk(x, n, k)); else if (v && typeof v.type === 'string') walk(v, n, k); } })(ACORN.parse(reach, { ecmaVersion: 'latest' }), null, null);
-  ok(!dynamic.length, 'no computed access on the global object (globalThis[...], this[...]) and no eval or Function in reachable code (a service reached that way is invisible to the scope rows)' + (dynamic.length ? ': ' + dynamic.slice(0, 5).join(', ') : ''));
+  function dynamicAccess(src) {
+    const ast = ACORN.parse(src, { ecmaVersion: 'latest' }), out = [], declared = new Set();
+    const pat = p => { if (!p) return; if (p.type === 'Identifier') declared.add(p.name); else if (p.type === 'ObjectPattern') p.properties.forEach(q => pat(q.value || q.argument));
+      else if (p.type === 'ArrayPattern') p.elements.forEach(pat); else if (p.type === 'AssignmentPattern') pat(p.left); else if (p.type === 'RestElement') pat(p.argument); };
+    (function d(n) { if (!n || typeof n.type !== 'string') return;
+      if (n.type === 'VariableDeclarator') pat(n.id);
+      if (/Function/.test(n.type)) { if (n.id) declared.add(n.id.name); n.params.forEach(pat); }
+      if (n.type === 'ClassDeclaration' && n.id) declared.add(n.id.name);
+      if (n.type === 'CatchClause') pat(n.param);
+      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(d); else if (v && typeof v.type === 'string') d(v); } })(ast);
+    (function w(n, parent, key, inClass) { if (!n || typeof n.type !== 'string') return;
+      // class code is strict: a detached class method's `this` is undefined, never the global object
+      if (n.type === 'ClassBody') inClass = true;
+      else if (/Function/.test(n.type) && n.type !== 'ArrowFunctionExpression' && !(parent && parent.type === 'MethodDefinition')) inClass = false;
+      const memObj = parent && parent.type === 'MemberExpression' && key === 'object';
+      const plainProp = parent && ((parent.type === 'MemberExpression' && key === 'property' && !parent.computed) ||
+        (parent.type === 'Property' && key === 'key' && !parent.computed) || (parent.type === 'MethodDefinition' && key === 'key' && !parent.computed));
+      if (n.type === 'Identifier' && !plainProp) {
+        if (GLOBALS.has(n.name) && !declared.has(n.name)) out.push('A1 ' + n.name + '@' + n.start);
+        if (n.name === 'Reflect' && !declared.has('Reflect')) out.push('A2 Reflect@' + n.start);
+        if (n.name === 'eval') out.push('A3 eval@' + n.start);
+        if (n.name === 'Function' && !(parent && parent.type === 'BinaryExpression' &&
+            (parent.operator === 'instanceof' ? key === 'right' : /^[!=]==?$/.test(parent.operator)))) out.push('A3 Function@' + n.start);
+      }
+      if (n.type === 'ThisExpression') {
+        if (memObj && !parent.computed && SERVICES.has(parent.property.name)) out.push('A4 this.' + parent.property.name + '@' + n.start);
+        else if (!inClass && (!memObj || parent.computed)) out.push('A4 ' + (memObj ? 'this[...]' : 'this') + '@' + n.start);
+      }
+      if (n.type === 'MemberExpression') {
+        const name = n.computed ? (n.property.type === 'Literal' ? String(n.property.value)
+          : (n.property.type === 'TemplateLiteral' && !n.property.expressions.length ? n.property.quasis[0].value.cooked : null)) : n.property.name;
+        if (name === 'constructor' && !((parent && parent.type === 'MemberExpression' && key === 'object' && !parent.computed && parent.property.name === 'name') ||
+            (parent && parent.type === 'BinaryExpression' && /^[!=]==?$/.test(parent.operator)))) out.push('A5 .constructor@' + n.start);
+      }
+      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(x => w(x, n, k, inClass)); else if (v && typeof v.type === 'string') w(v, n, k, inClass); }
+    })(ast, null, null, false);
+    return out;
+  }
+  const dynamic = dynamicAccess(reach);
+  ok(!dynamic.length, 'no service reached without its name in reachable code (global object, Reflect, eval/Function, this[...], .constructor; L100)' + (dynamic.length ? ': ' + dynamic.slice(0, 5).join(', ') : ''));
+  // The rule is driven on every run: each bypass found in review must still be flagged, each legitimate form must not be.
+  const BYPASS = [
+    'function run(){ globalThis["Drive"+"App"].getRootFolder(); }', 'function run(){ var k="Drive"+"App"; this[k].getRootFolder(); }',
+    'function run(){ (0,eval)("Drive"+"App").getRootFolder(); }', 'function run(){ new Function("return Drive"+"App")().getRootFolder(); }',
+    'function run(){ Reflect.get(globalThis,"Drive"+"App").getRootFolder(); }', 'function run(){ Object.values(globalThis).find(v => v && v.getRootFolder).getRootFolder(); }',
+    'function run(){ const g=globalThis; g["Drive"+"App"].getRootFolder(); }', 'const g=this; function run(){ g["Drive"+"App"].getRootFolder(); }',
+    'function run(){ (function(){return this})()["Drive"+"App"].getRootFolder(); }', 'function run(){ (()=>{}).constructor("return Drive"+"App")().getRootFolder(); }',
+    'function run(){ [].map.constructor("return Drive"+"App")().getRootFolder(); }', 'function run(){ [].map["constructor"]("return Drive"+"App")().getRootFolder(); }',
+    'function run(){ const F=(()=>{}).constructor; return F("return Drive"+"App")(); }', 'function run(){ const { DriveApp: D } = globalThis; return D.getRootFolder(); }',
+    'function run(){ return globalThis.DriveApp.getRootFolder(); }', 'function run(){ return this.DriveApp.getRootFolder(); }',
+    'function Grab(){ return this["Drive"+"App"]; }', 'class G { get(k) { return Reflect.get(this.__proto__.constructor("return this")(), k); } }',
+    'class H { get(k) { return Reflect.ownKeys(k); } }', 'const o = { m() { return this["Drive"+"App"]; } }; function run(){ return (0, o.m)(); }',
+  ];
+  const LEGIT = [
+    'function run(){ var o={eval:1}; return o.eval; }', 'class Box { set(k, v) { this[k] = v; } }', 'function run(){ const self={a:1}; return self["a"]; }',
+    'function run(x){ return x instanceof Function; }', 'function run(){ const o={a:1}; return Object.keys(o).length; }', 'class A {} function run(){ return new A().constructor.name; }',
+    'var Mod = (function(){ function priv(){ return 1; } return { pub: priv }; })();', 'function run(x){ return typeof x === "function" && x.constructor === Function; }',
+  ];
+  const missed = BYPASS.filter(s => !dynamicAccess(s).length), flagged = LEGIT.filter(s => dynamicAccess(s).length);
+  ok(!missed.length && !flagged.length, 'the L100 rule flags all ' + BYPASS.length + ' known bypass forms and none of ' + LEGIT.length + ' legitimate forms' +
+    (missed.length ? '; MISSED: ' + missed[0] : '') + (flagged.length ? '; FLAGGED: ' + flagged[0] : ''));
   // workflow review M1: an exemption whose unmasked body needs no scope the manifest lacks is obsolete (and would mask later calls)
   for (const [n, v, b] of EXBODIES) {
     const bc = b.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => l.replace(/\/\/.*$/, '').replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\\n])*`/g, "''")).join('\n');
