@@ -7,7 +7,7 @@ lesson to apply when this project meets the same class, not a check that runs he
 
 ## Security-relevant lessons (index)
 
-Most rows are test-engineering lessons. These are the ones about attackers, untrusted input and release integrity:
+Most rows are test-engineering lessons. These are the ones about attackers, untrusted input and release integrity. Plain-language write-ups: [docs/case-studies.md](../docs/case-studies.md).
 
 - **Spoofing and forged trust signals:** L14 (sender header the sender could write; forged, look-alike and reordered headers), L31 (trust check driven with hostile domain pairs), L65 (binding on a header shared by every tenant), L67 (an extra forged signature satisfied an "any match" check)
 - **Crafted input and denial of service:** L5 (quadratic parsing of untrusted HTML; 22 s on 500 KB), plus linear-time and seeded-fuzz checks for every untrusted-input parser
