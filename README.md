@@ -54,10 +54,12 @@ The runall GUARDs fail the run when:
 - **One verdict.** Every suite feeds one line. A failure is either listed in `tests/expected_deployed.txt` or
   `tests/known_open.txt` as `<suite> | <exact line>` with an owner's OK, or the run fails. An entry that no longer matches
   anything also fails the run, so the list of allowed failures cannot quietly rot.
-- **Lessons become guards.** `tests/LESSONS.md` lists 81 mistake classes from the source project. Each row gives its
+- **Lessons become guards.** `tests/LESSONS.md` lists 82 mistake classes: 81 from the source project and 1 found here. Each row gives its
   evidence (what happened, when, how it was found) and the check that now catches it. A bug fix adds a guard for the
   bug's class, not only the case. Many rows are about the tests themselves: a mock that dropped an argument, a fuzz
-  generator that lost float precision, a mutant that looped forever and was counted as killed.
+  generator that lost float precision, a mutant that looped forever and was counted as killed. Most of those checks are
+  MailToDrive's. The ones that run in this repository are the runall GUARDs, `tools/guards.js`, `tests/v368.test.js`, the
+  type check and `tests/deploy.test.sh`.
 - **Guards are driven, not read.** A check is trusted after it has been run against neighbouring forms of the bug and
   against mutants of the code it protects (lessons L19, L37, L46). Reading the check is not enough.
 - **Release only from a tested commit.** `deploy.ps1` uploads the bytes of the tested commit (`git archive`, not the

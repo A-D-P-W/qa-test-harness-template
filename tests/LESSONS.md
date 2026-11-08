@@ -1,4 +1,8 @@
-# Lessons → guards (seeded from MailToDrive tests/LESSONS.md; add this project's own rows below, numbered from L100) (Harness² pattern: evidence-backed lessons only, each turned into a check that fails the run)
+# Lessons → guards
+
+Seeded from MailToDrive's tests/LESSONS.md. This project's own rows follow the seeded ones, numbered from L100. Pattern (Harness²):
+evidence-backed lessons only, each turned into a check that fails the run.
+
 A lesson is kept only with its evidence (what happened, what it changed). Every bug fix adds a guard for the bug's
 CLASS, not only its instance, and a row here. A lesson with no mechanical guard says why and who checks it.
 Seeded rows: the Guard column names MAILTODRIVE's checks (its v<NNN> suites, tools). This template carries the runall GUARDs,
@@ -10,9 +14,9 @@ lesson to apply when this project meets the same class, not a check that runs he
 Most rows are test-engineering lessons. These are the ones about attackers, untrusted input and release integrity. Plain-language write-ups: [docs/case-studies.md](../docs/case-studies.md).
 
 - **Spoofing and forged trust signals:** L14 (sender header the sender could write; forged, look-alike and reordered headers), L31 (trust check driven with hostile domain pairs), L65 (binding on a header shared by every tenant), L67 (an extra forged signature satisfied an "any match" check)
-- **Crafted input and denial of service:** L5 (quadratic parsing of untrusted HTML; 22 s on 500 KB), plus linear-time and seeded-fuzz checks for every untrusted-input parser
+- **Crafted input and denial of service:** L5 (quadratic parsing of untrusted HTML; 22 s on 500 KB). MailToDrive runs linear-time and seeded-fuzz checks on every untrusted-input parser; this template ships no parser, so none run here
 - **Supply chain and release integrity:** L11 (upload the tested commit's bytes to a pinned target, verify live), L15 (release tags made immutable by ruleset), L22 (irreversible steps only after every check), L58 (wrong-target upload blocked), L83 (pinned CI action aging out)
-- **Least privilege:** L47 (scope check limited to reachable code), L70 and L77 (aliased and re-spelled API calls that evaded a scope check)
+- **Least privilege:** L47 (scope check limited to reachable code), L70 and L77 (aliased and re-spelled API calls that evaded a scope check), L100 (computed global access and eval evaded it too; found in this repository)
 - **Testing the tests:** L37 and L46 (mutation testing: 17 of 28 mutants first survived the contract tests), L19 (guards driven with neighbouring forms)
 
 | # | Lesson (class) | Evidence | Guard |
@@ -98,3 +102,4 @@ Most rows are test-engineering lessons. These are the ones about attackers, untr
 | L82 | A per-row uniqueness check on one field leaves the twin field shared | 3.10.0 release review: deploy.ps1 refused two project rows with one pin but accepted two rows with one release-tag prefix, so one project's tag could satisfy another's check at the same VERSION | deploy.ps1 STOPs on a shared or multi-segment TagPrefix; deploy tests in MailToDrive (77) and the template (79) |
 | L83 | A pinned third-party action ages out of the platform while the pin stays "correct" | 3.10.0 GitHub review (driven): CI's check-run carried "Node.js 20 is deprecated … actions/checkout@11bd719" (v4.2.2) after GitHub removed node20 from runners (changelog 2026-09-23); the run passed only because the runner forced node24 | tests.yml pins actions/checkout v6.0.2 (de0fac2, action.yml `using: node24`); check-run annotations are read at each release (runall NOTICE lines now also become check-run warnings) |
 | L84 | A suite that needs a clean starting state turns a warning-only rule into a failure | 3.10.0 (driven, commit 5924f38): v3100's drift mutations began with "scratch copy starts clean", so a stale template (a NOTICE by owner spec) failed the run; the agent also pushed that branch without reading the verdict first (L57 broken; branch only, main untouched) | v3100 rebuilds its scratch copy, re-pins its ports and judges each mutation by the NEW notices it adds (re-review: a rebuild alone left ported/rows/PATTERNS drift failing); the push step reads VERDICT first (command ordering in the agent's own steps, checked by the release rule's check-run confirmation) |
+| L100 | A static check that matches names cannot see a name that is computed at run time | Security review of this repository 2026-11-08 (driven): with `"oauthScopes": []`, `DriveApp.getRootFolder()` failed tests/v368.test.js, but `globalThis['Drive' + 'App'].getRootFolder()`, `this[k].fetch(...)` and `(0, eval)('UrlFetchApp')` each passed it (3 passed, 0 failed). The manifest would still block the call at run time, so the gap was a production failure the suite could not see, not extra privilege | tests/v368.test.js fails any computed member on `globalThis`/`self`/`window`/`global`/`this` and any `eval` or `Function` in reachable code (driven: each of the three forms now fails it) |

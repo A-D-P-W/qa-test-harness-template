@@ -103,6 +103,21 @@ if (ACORN) {
   const unrowed = [...chains].filter(c => !NOSCOPE.test(c) && !NEEDS.some(([re]) => re.test(c + '(')) && ![...chains].some(d => d !== c && d.startsWith(c + '.')));
   ok(!unrowed.length, 'every service call in reachable code has a NEEDS row or is known to need no scope (' + chains.size + ' chains)' + (unrowed.length ? ': ' + unrowed.join(', ') : ''));
   ok(!aliases.length, 'no service object is aliased, destructured or passed around in reachable code (the scope rows would not see its calls)' + (aliases.length ? ': ' + aliases.slice(0, 5).join(', ') : ''));
+  // L100 (security review 2026-11-08, driven): a service reached by a COMPUTED name on the global object
+  // (`globalThis['Drive' + 'App']`, `this[k]`) or through eval/Function is never an Identifier, so the alias and chain
+  // checks above cannot see it: each form passed this suite with "oauthScopes": []. Fail closed on all of them.
+  const GLOBALS = new Set(['globalThis', 'self', 'window', 'global']);
+  const dynamic = [];
+  (function walk(n, parent, key) { if (!n || typeof n.type !== 'string') return;
+    if (n.type === 'MemberExpression' && n.computed &&
+        (n.object.type === 'ThisExpression' || (n.object.type === 'Identifier' && GLOBALS.has(n.object.name))))
+      dynamic.push((n.object.type === 'ThisExpression' ? 'this' : n.object.name) + '[...]@' + n.start);
+    if (n.type === 'Identifier' && (n.name === 'eval' || n.name === 'Function') &&
+        !(parent && parent.type === 'MemberExpression' && key === 'property' && !parent.computed) &&
+        !(parent && parent.type === 'Property' && key === 'key' && !parent.computed))
+      dynamic.push(n.name + '@' + n.start);
+    for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(x => walk(x, n, k)); else if (v && typeof v.type === 'string') walk(v, n, k); } })(ACORN.parse(reach, { ecmaVersion: 'latest' }), null, null);
+  ok(!dynamic.length, 'no computed access on the global object (globalThis[...], this[...]) and no eval or Function in reachable code (a service reached that way is invisible to the scope rows)' + (dynamic.length ? ': ' + dynamic.slice(0, 5).join(', ') : ''));
   // workflow review M1: an exemption whose unmasked body needs no scope the manifest lacks is obsolete (and would mask later calls)
   for (const [n, v, b] of EXBODIES) {
     const bc = b.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => l.replace(/\/\/.*$/, '').replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\\n])*`/g, "''")).join('\n');

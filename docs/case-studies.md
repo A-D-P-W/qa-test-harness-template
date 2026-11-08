@@ -37,6 +37,8 @@ system in action, what would that look like?
 
 I imagine this is how the gap was found.
 
+Record: the Gmail-domain expert review found it (RISK D11, review 2026-10-20; tests/LESSONS.md L14).
+
 **Why it matters**
 A file containing malicious code could have had a wide variety of negative impacts on my computer.
 I am not sure how bad it might have been, and that is why I am diligent about anything involving
