@@ -5,6 +5,16 @@ Seeded rows: the Guard column names MAILTODRIVE's checks (its v<NNN> suites, too
 tools/guards.js, tests/v368.test.js, the type check and tests/deploy.test.sh; a seeded row whose guard is not among them is a
 lesson to apply when this project meets the same class, not a check that runs here.
 
+## Security-relevant lessons (index)
+
+Most rows are test-engineering lessons. These are the ones about attackers, untrusted input and release integrity:
+
+- **Spoofing and forged trust signals:** L14 (sender header the sender could write; forged, look-alike and reordered headers), L31 (trust check driven with hostile domain pairs), L65 (binding on a header shared by every tenant), L67 (an extra forged signature satisfied an "any match" check)
+- **Crafted input and denial of service:** L5 (quadratic parsing of untrusted HTML; 22 s on 500 KB), plus linear-time and seeded-fuzz checks for every untrusted-input parser
+- **Supply chain and release integrity:** L11 (upload the tested commit's bytes to a pinned target, verify live), L15 (release tags made immutable by ruleset), L22 (irreversible steps only after every check), L58 (wrong-target upload blocked), L83 (pinned CI action aging out)
+- **Least privilege:** L47 (scope check limited to reachable code), L70 and L77 (aliased and re-spelled API calls that evaded a scope check)
+- **Testing the tests:** L37 and L46 (mutation testing: 17 of 28 mutants first survived the contract tests), L19 (guards driven with neighbouring forms)
+
 | # | Lesson (class) | Evidence | Guard |
 |---|---|---|---|
 | L1 | Allowed-failure entries must be exact and scoped to one suite; a stale entry is a failure | Prefix match across suites hid a legacy T10b regression (3.7.0) and, in a QA mutation test, a real security-code leak (2026-10-20); T1f entry was stale | runall verdict: `<suite> \| <exact line>`, STALE ENTRY check |
