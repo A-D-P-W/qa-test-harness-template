@@ -117,22 +117,39 @@ if (ACORN) {
   // setPrototypeOf, __proto__). Known residual: a constructor key computed by a call at run time (for example
   // ["constr", "uctor"].join("") or a reversed string); no static rule can see it. Known false
   // positives: ES5 `this` in prototype functions and object-literal methods (write them as class methods).
+  // Round 4 (driven): A1/A2 no longer exempt a declared name (the exemption was file-wide, so an unrelated
+  // `function f(globalThis){}` or `catch (Reflect)` disarmed the rule everywhere); a local named self/global is a known false
+  // positive. Constant folding now follows string bindings (const/let/var, `=` and `+=`, file-wide, every value a name
+  // may hold), so `const a = "constr"; x[a + "uctor"]` is seen. A6 also flags Object used as a value (alias, destructuring,
+  // `with (Object)`) or with a computed key that is, or may be, one of the reflective names; a `__proto__` key anywhere; A7
+  // any `with` statement.
   const GLOBALS = new Set(['globalThis', 'self', 'window', 'global']);
   const REFLECTIVE = new Set(['getPrototypeOf', 'setPrototypeOf', 'getOwnPropertyDescriptor', 'getOwnPropertyDescriptors', 'getOwnPropertyNames']);
-  // constant string value of a node: a string literal, a template without expressions, or + of those; else null
-  const fold = x => { if (!x) return null; if (x.type === 'Literal' && typeof x.value === 'string') return x.value;
-    if (x.type === 'TemplateLiteral') { let v = x.quasis[0].value.cooked; for (let i = 0; i < x.expressions.length; i++) { const e = fold(x.expressions[i]); if (e === null) return null; v += e + x.quasis[i + 1].value.cooked; } return v; }
-    if (x.type === 'BinaryExpression' && x.operator === '+') { const a = fold(x.left), b = fold(x.right); return a === null || b === null ? null : a + b; } return null; };
+  const DANGER = v => v === 'constructor' || v === '__proto__' || REFLECTIVE.has(v);
   function dynamicAccess(src) {
-    const ast = ACORN.parse(src, { ecmaVersion: 'latest' }), out = [], declared = new Set();
-    const pat = p => { if (!p) return; if (p.type === 'Identifier') declared.add(p.name); else if (p.type === 'ObjectPattern') p.properties.forEach(q => pat(q.value || q.argument));
-      else if (p.type === 'ArrayPattern') p.elements.forEach(pat); else if (p.type === 'AssignmentPattern') pat(p.left); else if (p.type === 'RestElement') pat(p.argument); };
+    const ast = ACORN.parse(src, { ecmaVersion: 'latest' }), out = [], env = new Map();   // name -> Set of string values it may hold
+    // every constant string value a node may have (a literal, a template, + of those, a bound name); null if any part is unknown
+    const vals = x => { if (!x) return null;
+      if (x.type === 'Literal' && typeof x.value === 'string') return [x.value];
+      if (x.type === 'Identifier') return env.has(x.name) ? [...env.get(x.name)] : null;
+      const cat = (a, b) => { if (!a || !b) return null; const r = []; for (const u of a) for (const v of b) { if (r.length > 64) return null; r.push(u + v); } return r; };
+      if (x.type === 'TemplateLiteral') { let v = [x.quasis[0].value.cooked]; for (let i = 0; i < x.expressions.length; i++) { v = cat(cat(v, vals(x.expressions[i])), [x.quasis[i + 1].value.cooked]); if (!v) return null; } return v; }
+      if (x.type === 'BinaryExpression' && x.operator === '+') return cat(vals(x.left), vals(x.right));
+      if (x.type === 'ConditionalExpression') { const a = vals(x.consequent), b = vals(x.alternate); return a && b ? [...a, ...b] : null; }
+      return null; };
+    const bind = (name, v) => { if (!v) return; if (!env.has(name)) env.set(name, new Set()); v.forEach(x => env.get(name).add(x)); };
     (function d(n) { if (!n || typeof n.type !== 'string') return;
-      if (n.type === 'VariableDeclarator') pat(n.id);
-      if (/Function/.test(n.type)) { if (n.id) declared.add(n.id.name); n.params.forEach(pat); }
-      if (n.type === 'ClassDeclaration' && n.id) declared.add(n.id.name);
-      if (n.type === 'CatchClause') pat(n.param);
-      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(d); else if (v && typeof v.type === 'string') d(v); } })(ast);
+      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(d); else if (v && typeof v.type === 'string') d(v); }
+      if (n.type === 'VariableDeclarator' && n.id.type === 'Identifier') bind(n.id.name, vals(n.init));
+      if (n.type === 'AssignmentPattern' && n.left.type === 'Identifier') bind(n.left.name, vals(n.right));
+      if (n.type === 'AssignmentExpression' && n.left.type === 'Identifier') {
+        if (n.operator === '=') bind(n.left.name, vals(n.right));
+      } })(ast);
+    // then every `+=` on a bound name (a second pass, so the initial values are known first)
+    (function d(n) { if (!n || typeof n.type !== 'string') return;
+      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(d); else if (v && typeof v.type === 'string') d(v); }
+      if (n.type === 'AssignmentExpression' && n.operator === '+=' && n.left.type === 'Identifier' && env.has(n.left.name)) { const b = vals(n.right); if (b) bind(n.left.name, [...env.get(n.left.name)].flatMap(u => b.map(v => u + v))); } })(ast);
+    const keyOf = (n, prop, computed) => computed ? vals(prop) : [prop.name !== undefined ? prop.name : String(prop.value)];
     (function w(n, parent, key, inClass) { if (!n || typeof n.type !== 'string') return;
       // class code is strict: a detached class method's `this` is undefined, never the global object
       if (n.type === 'ClassBody') inClass = true;
@@ -140,29 +157,37 @@ if (ACORN) {
       const memObj = parent && parent.type === 'MemberExpression' && key === 'object';
       const plainProp = parent && ((parent.type === 'MemberExpression' && key === 'property' && !parent.computed) ||
         (parent.type === 'Property' && key === 'key' && !parent.computed) || (parent.type === 'MethodDefinition' && key === 'key' && !parent.computed));
+      if (n.type === 'WithStatement') out.push('A7 with@' + n.start);
       if (n.type === 'Identifier' && !plainProp) {
-        if (GLOBALS.has(n.name) && !declared.has(n.name)) out.push('A1 ' + n.name + '@' + n.start);
-        if (n.name === 'Reflect' && !declared.has('Reflect')) out.push('A2 Reflect@' + n.start);
+        if (GLOBALS.has(n.name)) out.push('A1 ' + n.name + '@' + n.start);
+        if (n.name === 'Reflect') out.push('A2 Reflect@' + n.start);
         if (n.name === 'eval') out.push('A3 eval@' + n.start);
         if (n.name === 'Function' && !(parent && parent.type === 'BinaryExpression' &&
             (parent.operator === 'instanceof' ? key === 'right' : /^[!=]==?$/.test(parent.operator)))) out.push('A3 Function@' + n.start);
+        // A6: Object only as Object.<name> / Object[<known safe name>], or compared; never as a value
+        if (n.name === 'Object') {
+          const k = memObj ? keyOf(parent, parent.property, parent.computed) : null;
+          if (memObj ? (!k || k.some(DANGER)) : !(parent && parent.type === 'BinaryExpression' && /^([!=]==?|instanceof)$/.test(parent.operator)))
+            out.push('A6 Object' + (memObj ? (k ? '.' + k.find(DANGER) : '[?]') : ' as a value') + '@' + n.start);
+        }
       }
       if (n.type === 'ThisExpression') {
         if (memObj && !parent.computed && SERVICES.has(parent.property.name)) out.push('A4 this.' + parent.property.name + '@' + n.start);
         else if (!inClass && (!memObj || parent.computed)) out.push('A4 ' + (memObj ? 'this[...]' : 'this') + '@' + n.start);
       }
-      // A5 also: any constant string "constructor" (folded across + and templates) used as a key, argument or value;
-      // a destructured constructor key; A6 the reflective Object calls that reach a prototype or a non-enumerable key.
+      // A5: any constant "constructor" (or __proto__) a node may hold, used as a key, argument or value
       const memKey = parent && parent.type === 'MemberExpression' && key === 'property' && parent.computed;
-      if (!memKey && fold(n) === 'constructor' && !(parent && parent.type === 'BinaryExpression' && parent.operator === '+')) out.push('A5 "constructor"@' + n.start);
-      if (n.type === 'Property' && parent && parent.type === 'ObjectPattern' && (n.computed ? fold(n.key) : (n.key.name || n.key.value)) === 'constructor') out.push('A5 {constructor}@' + n.start);
-      if (n.type === 'MemberExpression' && !n.computed && ((n.object.type === 'Identifier' && n.object.name === 'Object' && REFLECTIVE.has(n.property.name)) || n.property.name === '__proto__')) out.push('A6 ' + n.property.name + '@' + n.start);
+      const v = vals(n);
+      if (!memKey && v && v.some(x => x === 'constructor' || x === '__proto__') && !(parent && parent.type === 'BinaryExpression' && parent.operator === '+')) out.push('A5 "' + v.find(x => x === 'constructor' || x === '__proto__') + '"@' + n.start);
+      if (n.type === 'Property' && parent && parent.type === 'ObjectPattern') { const k = keyOf(n, n.key, n.computed); if (!k || k.some(x => x === 'constructor' || x === '__proto__')) out.push('A5 {' + (k ? k.join('|') : '[?]') + '}@' + n.start); }
+      if (n.type === 'MemberExpression' && !n.computed && n.property.name === '__proto__') out.push('A6 __proto__@' + n.start);
+      if (n.type === 'MemberExpression' && n.computed) { const k = vals(n.property); if (k && k.includes('__proto__')) out.push('A6 [__proto__]@' + n.start); }
       if (n.type === 'MemberExpression') {
-        const name = n.computed ? fold(n.property) : n.property.name;
-        if (name === 'constructor' && !((parent && parent.type === 'MemberExpression' && key === 'object' && !parent.computed && parent.property.name === 'name') ||
+        const names = n.computed ? (vals(n.property) || []) : [n.property.name];
+        if (names.includes('constructor') && !((parent && parent.type === 'MemberExpression' && key === 'object' && !parent.computed && parent.property.name === 'name') ||
             (parent && parent.type === 'BinaryExpression' && /^[!=]==?$/.test(parent.operator)))) out.push('A5 .constructor@' + n.start);
       }
-      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(x => w(x, n, k, inClass)); else if (v && typeof v.type === 'string') w(v, n, k, inClass); }
+      for (const k of Object.keys(n)) { if (k === 'loc') continue; const c = n[k]; if (Array.isArray(c)) c.forEach(x => w(x, n, k, inClass)); else if (c && typeof c.type === 'string') w(c, n, k, inClass); }
     })(ast, null, null, false);
     return out;
   }
@@ -186,12 +211,24 @@ if (ACORN) {
     'function run(){ const {["constr"+"uctor"]:C}=()=>{}; return C("return Drive"+"App")(); }', 'function run(){ const k=`constr${"uctor"}`; return [].map[k]("return Drive"+"App")(); }',
     'function run(){ return (function*(){}).constructor("return Drive"+"App")().next(); }', 
     'function run(){ const p=Object.getPrototypeOf(()=>{}); const n=Object.getOwnPropertyNames(p).find(x=>x.length===11); return p[n]("return Drive"+"App")(); }', 'function run(){ return Object.getOwnPropertyDescriptors(Object.getPrototypeOf(()=>{})).constructor.value("return Drive"+"App")(); }',
+    // round 4 (driven: each passed the full suite with "oauthScopes": [] and reached a fake DriveApp in a vm)
+    'function run(){ const a="constr"; return [].map[a+"uctor"]("return Drive"+"App")(); }', 'function run(){ let k="constr"; k+="uctor"; return [].map[k]("return Drive"+"App")(); }',
+    'function f(globalThis){ return 1; } function run(){ return globalThis["Drive"+"App"]; }', 'function f(Reflect){ return 1; } function g(globalThis){ return 1; } function run(){ return Reflect.get(globalThis,"Drive"+"App"); }',
+    'function run(){ const {getPrototypeOf:gp,getOwnPropertyNames:gn}=Object; const p=gp(()=>{}); return p[gn(p).find(x=>x.length===11)]("return Drive"+"App")(); }',
+    'function run(){ const p=Object["getPrototypeOf"](()=>{}); return p[Object["getOwnPropertyNames"](p).find(x=>x.length===11)]("return Drive"+"App")(); }',
+    'function q(){ try{ return 1; }catch(globalThis){ return 2; } } function run(){ return globalThis["Drive"+"App"]; }',
+    'function run(){ const {__proto__:P}=()=>{}; return P[Object.keys(P)[0]]; }', 'function run(){ var r; with(Object){ r=getPrototypeOf(()=>{}); return r; } }',
+    'function run(){ const o=Object; const p=o.getPrototypeOf(()=>{}); return p[o.getOwnPropertyNames(p).find(x=>x.length===11)]("return Drive"+"App")(); }',
+    'function run(){ const a="constr"; const b=a; return [].map[b+`uctor`]("return Drive"+"App")(); }', 'function run(){ var k; k="constr"; k=k+"uctor"; return [].map[k]("return Drive"+"App")(); }',
+    'function run(){ const k=1?"constructor":"x"; return [].map[k]("return Drive"+"App")(); }', 'function run(){ return ({}).__lookupGetter__("__proto__").call(()=>{}); }',
+    'function run(){ const n="getPrototypeOf"; return Object[n](()=>{}); }', 'function run(x){ return x["__pro"+"to__"]; }',
+    'function run(){ with([].map){ return constructor("return Drive"+"App")(); } }',
   ];
   const LEGIT = [
-    'function run(){ var o={eval:1}; return o.eval; }', 'class Box { set(k, v) { this[k] = v; } }', 'function run(){ const self={a:1}; return self["a"]; }',
+    'function run(){ var o={eval:1}; return o.eval; }', 'class Box { set(k, v) { this[k] = v; } }', 'function run(){ const me={a:1}; return me["a"]; }',
     'function run(x){ return x instanceof Function; }', 'function run(){ const o={a:1}; return Object.keys(o).length; }', 'class A {} function run(){ return new A().constructor.name; }',
     'var Mod = (function(){ function priv(){ return 1; } return { pub: priv }; })();', 'function run(x){ return typeof x === "function" && x.constructor === Function; }',
-    'function run(o){ const { a, b: [c], ...rest } = o; return a + c + Object.keys(rest).length; }', 'function run(a, i){ return a[i + 1] + a["k" + i] + a[`k${i}`]; }',
+    'function run(o){ const { a, b: [c], ...rest } = o; return a + c + Object.keys(rest).length; }', 'function run(a, i){ return a[i + 1] + a["k" + i] + a[`k${i}`]; }', 'function run(){ const k="na"+"me"; let j="a"; j+="b"; return Object.keys({})[0] + k + j + (Object.entries({}).length); }', 'function run(o){ return o && o.constructor === Object && Object["keys"](o).length; }',
     'class P { constructor(x) { this.x = x; } }', 'function run(e){ Logger.log("constructor failed: " + e); return "Constructor"; }',
     'function run(o){ return Object.assign({}, o, Object.fromEntries(Object.entries(o))); }', 'function run(x){ return x && x["constructor"] === Object; }',
   ];

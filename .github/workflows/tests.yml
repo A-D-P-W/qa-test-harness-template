@@ -1,6 +1,6 @@
 # Every push runs the full release test run + the Apps Script type check.
 # In a project made from this template, the 'main' ruleset requires check "runall" (docs/RULESETS.md). This template
-# repository itself has no rulesets.
+# repository's own 'main' ruleset blocks force-pushes and deletion only, with no required check.
 # No secrets: clasp credentials never reach CI. Full history + tags (fetch-depth 0): module GUARD (a) compares
 # each module with the last release/v* tag.
 name: tests
