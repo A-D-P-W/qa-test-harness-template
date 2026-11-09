@@ -11,6 +11,7 @@ D=$(cd "$(dirname "$0")/.." && pwd)
 W=$(mktemp -d "${TMPDIR:-/tmp}/guard-selftest.XXXXXX") || { echo "guard_selftest: FAIL could not make a scratch folder"; exit 1; }
 trap 'rm -rf -- "${W:?}"' EXIT
 fail=0; pass=0
+CUR=$(sed -n "s/^const VERSION = '\([0-9.]*\)';/\1/p" "$D/src/App.main.gs")
 copy() {   # copy <name> <branch>: tracked files + the fixture module into $W/<name>, as a git repo on <branch>
   local C="$W/$1"; mkdir -p "$C"
   (cd "$D" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$C" || { echo "guard_selftest: FAIL could not copy the tracked files"; exit 1; }
@@ -34,9 +35,15 @@ plant() {   # the violations; each line below is the trigger for one expected GU
   sed -i 's/"threshold_commits": 8/"threshold_commits": 9/' "$C/tests/workflow_review.json"
   sed -i 's/lists \([0-9]*\) mistake classes/lists 1\1 mistake classes/' "$C/README.md"   # L106: a count that no longer matches
   local dup; dup=$(grep '^| L100 |' "$C/tests/LESSONS.md"); printf '%s\n' "$dup" >> "$C/tests/LESSONS.md"   # L106: a lesson numbered twice
-  sed -i "s/^const VERSION = '[^']*';/const VERSION = '0.1.1';/" "$C/src/App.main.gs"
-  printf 'function useFixture_() { return fixtureClamp_(1); }\n' >> "$C/src/App.main.gs"
-  printf 'function fixtureLeak_() { return globalThis; }\n' >> "$C/modules/Fixture/Fixture.gs"
+  sed -i "s/^const VERSION = '[^']*';/const VERSION = '9.9.9';/" "$C/src/App.main.gs"
+  printf 'function useFixture_() { return fixtureClamp_(1); }\nfunction useBad_() { return badPub_(); }\n' >> "$C/src/App.main.gs"
+  printf 'function fixtureLeak_() { return globalThis; }\nfunction fixtureUsesBad_() { return badPub_(); }\n' >> "$C/modules/Fixture/Fixture.gs"
+  # L107: module-rule violations, one or more per check in tools/guards.js (tools/selftest/planted/)
+  local P="$D/tools/selftest/planted" m
+  for m in Bad Spare NoVer NoCon Broken; do mkdir -p "$C/modules/$m"; cp "$P/$m.gs" "$C/modules/$m/$m.gs"; echo "$m" >> "$C/deploy/modules.order"
+    [ -f "$P/$m.CONTRACT.md" ] && cp "$P/$m.CONTRACT.md" "$C/modules/$m/CONTRACT.md"; done
+  cp "$P/Bad.app.test.js" "$C/tests/contract/Bad.app.test.js"
+  sed -i 's#^src/App.main.gs$#modules/Spare/Spare.gs\nsrc/App.main.gs#' "$C/deploy/app.files"
   (cd "$C" && node tools/bundle.js >/dev/null) && echo '// hand edit' >> "$C/App.gs"
 }
 
@@ -74,21 +81,77 @@ expect planted 'GUARD tests/workflow_review.json thresholds/paths differ from ru
 expect planted 'GUARD README.md says 1'
 expect planted 'GUARD tests/LESSONS.md numbers a lesson twice: L100'
 expect planted 'GUARD STALE App.gs differs from a fresh build'
-expect planted 'GUARD App VERSION 0.1.1 has no tests/v011.test.js'
-expect planted 'GUARD App VERSION 0.1.1 != top CHANGELOG line 0.1.0'
+expect planted 'GUARD App VERSION 9.9.9 has no tests/v999.test.js'
+expect planted "GUARD App VERSION 9.9.9 != top CHANGELOG line $CUR"
 expect planted 'GUARD modules/Fixture: source or contract changed without a new version row'
-expect planted 'GUARD modules/Fixture/Fixture.gs:4 uses globalThis'
+expect planted 'GUARD modules/Fixture/Fixture.gs:6 uses globalThis'
 expect planted 'GUARD modules/Fixture/Fixture.gs: top-level fixtureLeak_ is neither Public nor Internal in CONTRACT.md'
 expect planted 'GUARD modules/Fixture: App uses it but its contract does not list App as a consumer'
 expect planted 'GUARD modules/Fixture: consumer App has no tests/contract/Fixture.app.test.js'
 expect planted 'GUARD deploy/app.files: App uses Fixture (directly or as a dependency) but does not bundle it'
+# tools/guards.js, every check that a planted input can reach (L107)
+expect planted 'GUARD modules/Broken/Broken.gs does not parse'
+expect planted 'GUARD modules/NoCon: no CONTRACT.md'
+expect planted 'GUARD modules/NoVer/CONTRACT.md: no "## Consumers" section'
+expect planted 'GUARD modules/NoVer: CONTRACT.md has no "Version: X.Y.Z" line'
+expect planted 'GUARD modules/Spare/CONTRACT.md: Consumers line is not "- <Project> — …": * App'
+expect planted 'GUARD modules/Spare/CONTRACT.md: Consumers line is not "- <Project> — <callers or planned …>": - App callers'
+expect planted 'GUARD modules/Spare: CONTRACT.md version table has no "| version | sha256 | change | ADR |" row'
+expect planted 'GUARD modules/Bad: Version 3.0.0 is not the top row of the version table (1.0.0)'
+expect planted 'GUARD modules/Bad: source or contract changed without a new version row'
+expect planted 'GUARD modules/Bad: version 1.0.0 appears twice'
+expect planted 'GUARD modules/Bad: version 2.0.0 cites no ADR with a bullet line "- Bad 2.0.0"'
+expect planted 'GUARD modules/Bad: version rows must go up from bottom to top (2.0.0 then 1.0.0)'
+expect planted 'GUARD modules/Bad/Bad.gs:1 top-level destructuring'
+expect planted 'GUARD modules/Bad/Bad.gs:2 top-level let badCount (only listed module-owned state)'
+expect planted 'GUARD modules/Bad/Bad.gs:3 top-level initializer of BAD_LOADED may run code or read other files at load time (call;'
+expect planted 'GUARD modules/Bad/Bad.gs:4 top-level ExpressionStatement (modules declare functions and constants only)'
+expect planted 'GUARD modules/Bad/Bad.gs:7 calls constructor BadMaker_ without new'
+expect planted 'GUARD modules/Bad/Bad.gs:8 uses this outside a constructor'
+if grep -qF 'GUARD modules/Fixture/Fixture.gs:4 uses this outside a constructor' "$W/planted.out"; then echo "FAIL planted: this inside the constructor FixtureBox_ was flagged"; fail=$((fail+1))
+else echo "PASS planted: this inside a constructor is not flagged"; pass=$((pass+1)); fi
+expect planted 'GUARD modules/Bad/Bad.gs:9 uses .constructor'
+expect planted 'GUARD modules/Bad/Bad.gs:10 names "constructor" (reaches Function)'
+expect planted 'GUARD modules/Bad/Bad.gs:11 uses Reflect'
+expect planted 'GUARD modules/Bad/Bad.gs:12 uses new.target'
+expect planted 'GUARD modules/Bad/Bad.gs:13 uses Apps Script service DriveApp, not listed in its contract'
+expect planted 'GUARD modules/Bad/Bad.gs:14 free identifier mysteryName is not a built-in, service or module name'
+expect planted 'GUARD modules/Bad/Bad.gs:15 uses App global useFixture_ (pass it as an argument)'
+expect planted 'GUARD modules/Bad/Bad.gs:19 names "constructor" (reaches Function)'
+expect planted 'GUARD modules/Bad/Bad.gs:20 names "constructor" (reaches Function)'
+expect planted 'GUARD modules/Bad/Bad.gs:21 names "constructor" (reaches Function)'
+expect planted 'GUARD modules/Bad/Bad.gs:22 uses eval'
+expect planted 'GUARD modules/Bad/Bad.gs:23 uses Function'
+expect planted "GUARD modules/Bad/Bad.gs:16 uses Fixture.fixtureLeak_, which is not Public in Fixture's contract"
+expect planted 'GUARD modules/Fixture/Fixture.gs:7 uses Bad.badPub_ but "Depends on" does not list Bad'
+expect planted 'GUARD App: top-level health declared in modules/Spare and src/App.main.gs'
+expect planted 'GUARD deploy/app.files: bundles Spare, which App does not use'
+expect planted 'GUARD tests/contract/Bad.app.test.js: App uses Bad.badPub_ but its contract test never exercises it'
+expect planted 'GUARD tests/contract/Bad.app.test.js: references Internal helper badHelper_'
+expect planted 'GUARD docs/ARCHITECTURE.md: registry row for Bad does not list consumer App'
 
 copy main main
+# L107: rules that need history. Older is committed on main at 2.0.0 and tagged; the Fixture row and source change after
+# that, and Older goes back to 1.0.0.
+older() {   # older <version>: write modules/Older at <version> with its real sha
+  local M="$W/main/modules/Older"; mkdir -p "$M"; cp "$D/tools/selftest/planted/Older.gs" "$M/Older.gs"
+  sed -e "s/VER/$1/g" -e "s/SHA/$(printf '%064d' 0)/" "$D/tools/selftest/planted/Older.CONTRACT.md" > "$M/CONTRACT.md"
+  local sha; sha=$(cd "$W/main" && node tools/guards.js --sha Older); sed -i "s/$(printf '%064d' 0)/$sha/" "$M/CONTRACT.md"; }
+older 2.0.0; echo Older >> "$W/main/deploy/modules.order"; printf -- '- Older 2.0.0\n- Older 1.0.0\n' >> "$W/main/docs/adr/0900-guard-selftest-fixture.md"
+(cd "$W/main" && git add -A && git -c user.email=t@t.invalid -c user.name=t commit -qm older && git tag release/v0.0.1) >/dev/null 2>&1 \
+  || { echo "guard_selftest: FAIL could not commit and tag the main copy"; exit 1; }
+older 1.0.0
+printf '// changed after the tag\n' >> "$W/main/modules/Fixture/Fixture.gs"
+fsha=$(cd "$W/main" && node tools/guards.js --sha Fixture); sed -i "s/^| 1.0.0 | [0-9a-f]\{64\} |/| 1.0.0 | $fsha |/" "$W/main/modules/Fixture/CONTRACT.md"
 sed -i 's/^\( \* [0-9][0-9.]*\)  *[^ ]*/\1  (dev)/' "$W/main/src/App.main.gs"
 sed -i 's/"last_review_commit": "[^"]*"/"last_review_commit": "not-a-commit"/' "$W/main/tests/workflow_review.json"
 (cd "$W/main" && node tools/bundle.js >/dev/null); run main
 expect main 'is dated (dev) on main: replace it with the release date'
 expect main 'GUARD tests/workflow_review.json last_review_commit is not a commit on main'
+expect main 'GUARD modules/Fixture: version 1.0.0 row changed after it reached main (bump the version instead)'
+expect main 'GUARD modules/Fixture: changed since release/v0.0.1 but Version is still 1.0.0'
+expect main 'GUARD modules/Older: version 2.0.0 (on main) was removed from the version table'
+expect main 'GUARD modules/Older: Version 1.0.0 is lower than 2.0.0 at release/v0.0.1'
 
 echo; echo "$pass passed, $fail failed"
 [ $fail = 0 ] || { echo "guard_selftest: FAIL (outputs: rerun with the scratch folder kept to inspect)"; exit 1; }

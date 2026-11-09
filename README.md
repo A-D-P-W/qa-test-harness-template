@@ -31,7 +31,7 @@ placeholder script IDs and runs runall there, the way a new project's first bran
 | Suite / check | What it catches |
 |---|---|
 | `typecheck` | Calls to Apps Script members that do not exist, checked against Google's published types (`tests/typecheck/`, typescript and @types/google-apps-script pinned by integrity hash). Mocks cannot catch this. |
-| `v368` (scope map) | Code that calls an Apps Script service whose OAuth scope is missing from `appsscript.json`. The check walks the AST of the code the project can reach, so aliasing (`const A = DriveApp`) and optional chaining are covered. Any service with no row in its NEEDS table fails, and every run checks each row against a sample call (L105), because the template's own code calls no service. Code that reaches a service without naming it (the global object, `Reflect`, `eval`/`Function`, `this[...]`, `.constructor`, property-descriptor lookups) fails too, and every run re-checks that rule against every known bypass form and a set of legitimate forms, and prints both counts (L100). Four review rounds each found new bypasses, and a name produced by running code (for example `['constr', 'uctor'].join('')`) is a documented residual. It is a lint against accidental omissions, not a sandbox: the manifest is what Google enforces at run time. |
+| `v368` (scope map) | Code that calls an Apps Script service whose OAuth scope is missing from `appsscript.json`. The check walks the AST of the code the project can reach, so aliasing (`const A = DriveApp`) and optional chaining are covered, and the alias and chain checks are driven with example forms on every run. Without its parser the suite fails in every mode (L107). Any service with no row in its NEEDS table fails, and every run checks each row against a sample call (L105), because the template's own code calls no service. Code that reaches a service without naming it (the global object, `Reflect`, `eval`/`Function`, `this[...]`, `.constructor`, property-descriptor lookups) fails too, and every run re-checks that rule against every known bypass form and a set of legitimate forms, and prints both counts (L100). Four review rounds each found new bypasses, and a name produced by running code (for example `['constr', 'uctor'].join('')`) is a documented residual. It is a lint against accidental omissions, not a sandbox: the manifest is what Google enforces at run time. |
 | `v010` | The example project's own tests. Each version adds a `tests/v<VERSION without dots>.test.js` (0.1.1: `tests/v011.test.js`). |
 | `deploy` | `deploy.ps1`, the only release path, tested against real git repositories and a fake `clasp` CLI. The fake is modelled on the source of clasp 3.4.1. Each test asserts which stage stopped the release, not only that it stopped. |
 | `guards` (`tools/guards.js`) | Module rules, checked on the AST: a module reads no consumer globals and calls only the services its contract lists; every consumer has a contract test; module versions are immutable once released. |
@@ -51,7 +51,8 @@ The runall GUARDs fail the run when:
 - the README's count of lessons differs from the rows in `tests/LESSONS.md`, or a lesson number appears twice
 
 `tools/guard_selftest.sh` (run by CI) plants a violation for each of these in a scratch copy, plus module-rule violations
-in a fixture module (`tools/selftest/Fixture/`), and fails if any check stays silent (L101). It also runs runall from a
+in fixture modules (`tools/selftest/Fixture/`, `tools/selftest/planted/`), one per module rule including the ones that
+need history on main, and fails if any check stays silent (L101, L107). It also runs runall from a
 path with a space next to a canary folder (L104). CI runs shellcheck on every tracked `*.sh`.
 
 ## Design rationale
@@ -59,7 +60,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 - **One verdict.** Every suite feeds one line. A failure is either listed in `tests/expected_deployed.txt` or
   `tests/known_open.txt` as `<suite> | <exact line>` with an owner's OK, or the run fails. An entry that no longer matches
   anything also fails the run, so the list of allowed failures cannot quietly rot.
-- **Lessons become guards.** `tests/LESSONS.md` lists 88 mistake classes: 81 from the source project and 7 found here. Each row gives its
+- **Lessons become guards.** `tests/LESSONS.md` lists 89 mistake classes: 81 from the source project and 8 found here. Each row gives its
   evidence (what happened, when, how it was found) and the check that now catches it. A bug fix adds a guard for the
   bug's class, not only the case. Many rows are about the tests themselves: a mock that dropped an argument, a fuzz
   generator that lost float precision, a mutant that looped forever and was counted as killed. Most of those checks are

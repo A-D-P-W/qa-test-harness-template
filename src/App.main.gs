@@ -6,8 +6,10 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.1  (dev)       Template test gaps closed (L107): v368 fails when its AST checks did not run and drives
+ *                    the alias and chain checks with example forms; the GUARD self-test plants every module check.
  * 0.1.0  (dev)       Project created from the template (qa-test-harness-template). Replace (dev) with today's date
  *                    before the first push to main (runall GUARD).
  */

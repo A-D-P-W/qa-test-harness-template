@@ -12,7 +12,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? pass++ : fa
 
 // 3.9.2: only the code the project's own files can reach (tools/reachable.js) — a shared module's function the project
 // never calls does not demand its scope. Without the parser (acorn, installed with the type check) the scope rows check the
-// whole file, but the alias, chain and L100 checks cannot run: that is a FAIL under FULL=1 (release), an INFO otherwise.
+// whole file, but the alias, chain and L100 checks cannot run: that is a FAIL in every mode (L107).
 let reach = src, ACORN = null, EXBODIES = [];
 try { const acorn = require(process.env.MTD_ACORN || path.join(process.env.MTD_TC_CACHE || path.join(require('os').homedir(), '.cache', 'mtd-tc'), 'node_modules', 'acorn'));
       // the project whose committed bundle SRC is (any other file, e.g. runall's file-mode copy → whole bundle)
@@ -101,29 +101,50 @@ ok(!rowMiss.length && !rowless.length, 'every NEEDS row matches its ' + ROW_SAMP
   (rowMiss.length ? '; NO ROW FOR: ' + rowMiss.map(([c, s]) => c + ' -> ' + s).join(', ') : '') + (rowless.length ? '; NO SAMPLE FOR: ' + rowless[0][0].source : ''));
 // 3.9.7 workflow review H1: the regex rows see only `Service.` text, so an alias (`const { Events } = Calendar`, `const A = DriveApp`)
 // would hide a call. Every service name in reachable code must be the object of a plain member access (or a typeof operand).
-if (!ACORN && process.env.FULL) ok(false, 'parser (acorn) unavailable: the alias, chain and L100 checks did not run (FULL=1 needs them)');
+// L107: the AST checks below must report that they ran. A parser that failed to load, or a guard around them that
+// skipped them, once left only the two checks above and the suite still passed ("2 passed, 0 failed", even with FULL=1).
+const RAN = new Set();
 if (ACORN) {
   const SERVICES = new Set(['GmailApp', 'Gmail', 'Calendar', 'CalendarApp', 'DriveApp', 'Drive', 'MailApp', 'UrlFetchApp', 'ScriptApp',
     'SpreadsheetApp', 'Sheets', 'DocumentApp', 'Session', 'PropertiesService', 'LockService', 'CacheService', 'People', 'Tasks']);
-  const aliases = [];
+  function aliasesIn(text) { const aliases = [];
   (function walk(n, parent, key) { if (!n || typeof n.type !== 'string') return;
     if (n.type === 'Identifier' && SERVICES.has(n.name) &&
         !(parent && parent.type === 'MemberExpression' && key === 'object' && !parent.computed) &&
         !(parent && parent.type === 'MemberExpression' && key === 'property' && !parent.computed) &&
         !(parent && parent.type === 'Property' && key === 'key' && !parent.computed && !parent.shorthand) &&
         !(parent && parent.type === 'UnaryExpression' && parent.operator === 'typeof')) aliases.push(n.name + '@' + n.start);
-    for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(x => walk(x, n, k)); else if (v && typeof v.type === 'string') walk(v, n, k); } })(ACORN.parse(reach, { ecmaVersion: 'latest' }), null, null);
+    for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(x => walk(x, n, k)); else if (v && typeof v.type === 'string') walk(v, n, k); } })(ACORN.parse(text, { ecmaVersion: 'latest' }), null, null);
+  return aliases; }
   // 3.9.9 workflow review H1: every service member chain in reachable code must be matched by a NEEDS row or be known to
   // need no scope — a service with no row (Sheets, Tasks, People, …) would otherwise pass unseen.
   const NOSCOPE = /^(PropertiesService|LockService|CacheService)\.|^ScriptApp\.(WeekDay|EventType|AuthMode)\b|^DriveApp\.(Access|Permission)\b|^Session\.getScriptTimeZone\b/;
-  const chains = new Set();
+  function chainsIn(text) { const chains = new Set();
   (function walk(n) { if (!n || typeof n.type !== 'string') return;
     if (n.type === 'MemberExpression' && !n.computed) { const parts = []; let m = n; while (m.type === 'MemberExpression' && !m.computed) { parts.unshift(m.property.name); m = m.object; }
       if (m.type === 'Identifier' && SERVICES.has(m.name)) chains.add([m.name, ...parts].join('.')); }
-    for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v.type === 'string') walk(v); } })(ACORN.parse(reach, { ecmaVersion: 'latest' }));
-  const unrowed = [...chains].filter(c => !NOSCOPE.test(c) && !NEEDS.some(([re]) => re.test(c + '(')) && ![...chains].some(d => d !== c && d.startsWith(c + '.')));
-  ok(!unrowed.length, 'every service call in reachable code has a NEEDS row or is known to need no scope (' + chains.size + ' chains)' + (unrowed.length ? ': ' + unrowed.join(', ') : ''));
+    for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v.type === 'string') walk(v); } })(ACORN.parse(text, { ecmaVersion: 'latest' }));
+  return chains; }
+  const unrowedIn = text => { const chains = chainsIn(text); return [...chains].filter(c => !NOSCOPE.test(c) && !NEEDS.some(([re]) => re.test(c + '(')) && ![...chains].some(d => d !== c && d.startsWith(c + '.'))); };
+  const unrowed = unrowedIn(reach), aliases = aliasesIn(reach);
+  ok(!unrowed.length, 'every service call in reachable code has a NEEDS row or is known to need no scope (' + chainsIn(reach).size + ' chains)' + (unrowed.length ? ': ' + unrowed.join(', ') : ''));
   ok(!aliases.length, 'no service object is aliased, destructured or passed around in reachable code (the scope rows would not see its calls)' + (aliases.length ? ': ' + aliases.slice(0, 5).join(', ') : ''));
+  RAN.add('chain'); RAN.add('alias');
+  // L107: each check is driven on every run with forms it must flag and forms it must pass, as the L100 rule is below.
+  const ALIAS_BAD = ['const A = DriveApp; A.getRootFolder();', 'const { Events } = Calendar;', 'function f(s){ return s; } f(GmailApp);',
+    'const o = { d: DriveApp };', 'const all = [DriveApp];'];
+  const ALIAS_GOOD = ['DriveApp.getRootFolder();', 'if (typeof DriveApp === "undefined") {}', 'const o = { DriveApp: 1 }; o.DriveApp;',
+    'GmailApp.search("x").length;', 'const m = { DriveApp() { return 1; } };'];
+  const CHAIN_BAD = ['Tasks.Tasklists.list();', 'People.People.get("me");', 'Sheets.Spreadsheets.get(id);', 'ScriptApp.getService();'];
+  const CHAIN_GOOD = ['PropertiesService.getScriptProperties();', 'ScriptApp.WeekDay.MONDAY;', 'DriveApp.Access.PRIVATE;', 'Session.getScriptTimeZone();',
+    'Calendar.Events.insert(e, id);', 'DriveApp.getRootFolder().getName();', 'ScriptApp.newTrigger("f");'];
+  const aMiss = ALIAS_BAD.filter(x => !aliasesIn(x).length), aFlag = ALIAS_GOOD.filter(x => aliasesIn(x).length);
+  ok(!aMiss.length && !aFlag.length, 'the alias check flags all ' + ALIAS_BAD.length + ' aliasing forms and none of ' + ALIAS_GOOD.length + ' plain uses' +
+    (aMiss.length ? '; MISSED: ' + aMiss[0] : '') + (aFlag.length ? '; FLAGGED: ' + aFlag[0] : ''));
+  const cMiss = CHAIN_BAD.filter(x => !unrowedIn(x).length), cFlag = CHAIN_GOOD.filter(x => unrowedIn(x).length);
+  ok(!cMiss.length && !cFlag.length, 'the chain check flags all ' + CHAIN_BAD.length + ' calls with no NEEDS row and none of ' + CHAIN_GOOD.length + ' rowed or scope-free calls' +
+    (cMiss.length ? '; MISSED: ' + cMiss[0] : '') + (cFlag.length ? '; FLAGGED: ' + cFlag[0] : ''));
+  RAN.add('alias corpus'); RAN.add('chain corpus');
   // L100 (security reviews 2026-11-08, driven): a service reached WITHOUT its name in the code is invisible to the rows
   // and to the alias check above. Each form below passed this suite with "oauthScopes": [] until this rule. The rule:
   //   A1 any reference to globalThis/self/window/global the file does not declare itself
@@ -212,6 +233,7 @@ if (ACORN) {
     return out;
   }
   const dynamic = dynamicAccess(reach);
+  RAN.add('L100');
   ok(!dynamic.length, 'no service reached without its name in reachable code (global object, Reflect, eval/Function, this[...], .constructor; L100)' + (dynamic.length ? ': ' + dynamic.slice(0, 5).join(', ') : ''));
   // The rule is driven on every run: each bypass found in review must still be flagged, each legitimate form must not be.
   const BYPASS = [
@@ -255,7 +277,7 @@ if (ACORN) {
     'class P { constructor(x) { this.x = x; } }', 'function run(e){ Logger.log("constructor failed: " + e); return "Constructor"; }',
     'function run(o){ return Object.assign({}, o, Object.fromEntries(Object.entries(o))); }', 'function run(x){ return x && x["constructor"] === Object; }',
   ];
-  const missed = BYPASS.filter(s => !dynamicAccess(s).length), flagged = LEGIT.filter(s => dynamicAccess(s).length);
+  const missed = BYPASS.filter(s => !dynamicAccess(s).length), flagged = LEGIT.filter(s => dynamicAccess(s).length); RAN.add('L100 corpus');
   ok(!missed.length && !flagged.length, 'the L100 rule flags all ' + BYPASS.length + ' known bypass forms and none of ' + LEGIT.length + ' legitimate forms' +
     (missed.length ? '; MISSED: ' + missed[0] : '') + (flagged.length ? '; FLAGGED: ' + flagged[0] : ''));
   // workflow review M1: an exemption whose unmasked body needs no scope the manifest lacks is obsolete (and would mask later calls)
@@ -264,6 +286,10 @@ if (ACORN) {
     ok(NEEDS.some(([re, scopes]) => re.test(bc) && !scopes.some(x => granted.has(x))), 'v368-exempt.json: ' + n + ' still needs its exemption (an obsolete exemption masks later calls)');
   }
 }
+// L107: fails, in every mode, when the parser is missing or any AST check above did not run.
+const AST_CHECKS = ['alias', 'chain', 'alias corpus', 'chain corpus', 'L100', 'L100 corpus'];
+const notRun = AST_CHECKS.filter(k => !RAN.has(k));
+ok(!notRun.length, 'the ' + AST_CHECKS.length + ' AST checks ran' + (notRun.length ? '; NOT RUN: ' + notRun.join(', ') + (ACORN ? '' : ' (parser acorn unavailable: tests/typecheck/run.sh installs it)') : ''));
 
 // Behaviour (projects that call sheetUsable_ with SHEET_OPTS — MailToDrive): it must work when Session would throw.
 if (/\bsheetUsable_\(/.test(code) && !/\bSHEET_OPTS\b/.test(code)) ok(false, 'sheetUsable_ is reachable but no SHEET_OPTS was found: the Session-unauthorised behavior checks cannot run (review 3.9.2 M3)');
