@@ -13,7 +13,8 @@ case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN=1; W=$(cygpath -m "$W"); D=$(cyg
 mkdir -p "$W/bin"
 if [ -n "$WIN" ]; then printf '@node "%s" %%*\r\n' "$D/tests/deploy/fake-clasp.js" > "$W/bin/clasp.cmd"
 else printf '#!/bin/bash\nexec node %s "$@"\n' "$D/tests/deploy/fake-clasp.js" > "$W/bin/clasp"; chmod +x "$W/bin/clasp"; fi
-export PATH="$W/bin:$PATH" FAKE_LOG="$W/calls.log" FAKE_LIVE_ROOT="$W/live" TMPDIR="$W/tmp"
+BINP="$W/bin"; [ -n "$WIN" ] && BINP=$(cygpath -u "$W/bin")   # PATH entries stay POSIX: "C:/..." would split at the colon
+export PATH="$BINP:$PATH" FAKE_LOG="$W/calls.log" FAKE_LIVE_ROOT="$W/live" TMPDIR="$W/tmp"
 [ -n "$WIN" ] && export TEMP="$W/tmp" TMP="$W/tmp"
 PIN=1TemplateTestPinXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX; VER=$(grep -oP "const VERSION = '\K[0-9.]+" "$D/App.gs")
 LIVE="$W/live/$PIN"; pass=0; fail=0; n=0
