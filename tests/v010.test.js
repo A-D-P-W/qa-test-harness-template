@@ -1,4 +1,4 @@
-// v0.1.0: the project skeleton. Every version ADDS its own tests/v<version>.test.js (runall GUARD); never rename old ones.
+// v0.1.0: the project skeleton. Every version ADDS its own tests/v<VERSION without dots>.test.js, e.g. v011 (runall GUARD); never rename old ones.
 // Run: SRC=<abs .gs> node tests/v010.test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const SRC = process.env.SRC || process.env.MTD_GS || path.resolve(__dirname, '..', 'App.gs');

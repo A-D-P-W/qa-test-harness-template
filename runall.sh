@@ -31,7 +31,7 @@ if [ $tcrc = 3 ]; then echo "== typecheck: SKIPPED ($(head -1 $O/typecheck.txt))
 else sum typecheck $O/typecheck.txt $tcrc; fi
 for t in $D/tests/v[0-9]*.test.js; do [ -e "$t" ] || continue; n=$(basename $t .test.js); SRC=$F node $t > $O/$n.txt 2>&1; sum $n $O/$n.txt; done
 if command -v "${PWSH:-pwsh}" >/dev/null 2>&1; then bash $D/tests/deploy.test.sh > $O/deploy.txt 2>&1; sum deploy $O/deploy.txt
-else echo "== deploy: SKIPPED (no PowerShell; set PWSH=<path to pwsh> to run deploy.ps1 tests)"
+else echo "== deploy: SKIPPED (PowerShell not found as ${PWSH:-pwsh}; set PWSH=<path to pwsh> to run deploy.ps1 tests)"
      [ -n "$FULL" ] && echo "[deploy] FAIL suite not run: FULL=1 (release) needs PowerShell for tests/deploy.test.sh" >> $O/_fails.txt; fi
 # Consumer-driven contract tests and the module GUARDs (a)(b)(c) — acorn comes with the type check tools
 for t in $D/tests/contract/*.test.js; do [ -e "$t" ] || continue; n=contract.$(basename $t .test.js); node $t > $O/$n.txt 2>&1; sum $n $O/$n.txt; done
@@ -85,7 +85,7 @@ for t in glob.glob(os.path.join(D, 'tests', 'v[0-9]*.test.js')):
 # A test-looking file whose name the runner's glob misses is never run (MailToDrive L-f).
 for t in os.listdir(os.path.join(D, 'tests')):
     if re.search(r'\.(m?js|cjs|sh|ts)$', t) and not re.match(r'v\d+\.test\.js$', t) and t not in ('deploy.test.sh',):
-        bad.append(f'GUARD tests/{t} looks like a test but runall never runs it (rename to v<version>.test.js or move it)')
+        bad.append(f'GUARD tests/{t} looks like a test but runall never runs it (rename to v<VERSION without dots>.test.js, e.g. v011, or move it)')
 for t in glob.glob(os.path.join(D, 'tests', '*', '**', '*.test.js'), recursive=True):   # a test in a subfolder never runs
     r = os.path.relpath(t, D)
     if not re.match(r'tests/(archive|typecheck)/', r) and not re.match(r'tests/contract/[A-Za-z]+\.[a-z]+\.test\.js$', r): bad.append(f'GUARD {r} looks like a test in a subfolder that runall never runs')
@@ -104,7 +104,7 @@ _projects = [l.split() for l in open(os.path.join(O, '_projects.txt')).read().sp
 _pdirs = [p[1] for p in _projects if p[1] != '.']
 for _pd in _pdirs:   # every other project's tests/ folder gets the same hygiene scans and the unrun-file check
     for t in (os.listdir(os.path.join(D, _pd, 'tests')) if os.path.isdir(os.path.join(D, _pd, 'tests')) else []):
-        if re.search(r'\.(m?js|cjs|sh|ts)$', t) and not re.match(r'v\d+\.test\.js$', t): bad.append(f'GUARD {_pd}/tests/{t} looks like a test but runall never runs it (rename to v<version>.test.js or move it)')
+        if re.search(r'\.(m?js|cjs|sh|ts)$', t) and not re.match(r'v\d+\.test\.js$', t): bad.append(f'GUARD {_pd}/tests/{t} looks like a test but runall never runs it (rename to v<VERSION without dots>.test.js, e.g. v011, or move it)')
     for t in glob.glob(os.path.join(D, _pd, 'tests', '*', '**', '*.test.js'), recursive=True): bad.append(f'GUARD {os.path.relpath(t, D)} looks like a test in a subfolder that runall never runs')
 for p in glob.glob(os.path.join(D, 'tests', '**', '*.js'), recursive=True) + [q for _pd in _pdirs for q in glob.glob(os.path.join(D, _pd, 'tests', '**', '*.js'), recursive=True)]:
     if '/archive/' in p or '/node_modules/' in p: continue

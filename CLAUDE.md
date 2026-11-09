@@ -26,8 +26,9 @@
   fails only live. `tests/v368.test.js` guards the scope map; extend its NEEDS table when calling a new Apps Script service.
 - Any new Apps Script / advanced-service API gets a NEEDS row and a live check in the owner's account before it is trusted
   (mocks hid three live-only bugs in MailToDrive, L4). Any new parser of untrusted input gets linear-time + fuzz checks (L5).
-- Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line at the top of `src/App.main.gs`
-  and a `tests/v<version>.test.js`, then `node tools/bundle.js`.
+- Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line
+  at the top of the `/* CHANGELOG` block in `src/App.main.gs` (`<version>  <date or (dev)>  <change>`) and a
+  `tests/v<VERSION without dots>.test.js` (0.1.1: `tests/v011.test.js`), then `node tools/bundle.js`.
 - Every bug fix adds a guard for the bug's CLASS (a test or a runall GUARD), not only the case, plus a row in
   `tests/LESSONS.md` with its evidence. Lessons without evidence are not kept.
 - Rerun all suites (`./runall.sh`) after any change, and `FULL=1 ./runall.sh` before every push (L57).
@@ -39,7 +40,7 @@
 - Report suite deltas per suite; a FAIL that existed before your change is not yours.
 
 ## Tests — one command, one verdict
-- `./runall.sh` (`FULL=1 ./runall.sh` before a release; writes `out/`, delete before finishing) ends with
+- `./runall.sh` (`FULL=1 ./runall.sh` before a release; writes `out/`, which git ignores) ends with
   `VERDICT: PASS - no regressions` or `VERDICT: REGRESSION - n problem(s)` (exit 1). It also fails on its GUARDs
   (tests/LESSONS.md): a suite that passes nothing, a `tests/v*.test.js` not run, no test file for the current VERSION,
   clock-offset time bombs and unclamped relative clock offsets, two suites with identical results, stale allowance entries,
@@ -53,11 +54,12 @@
   gets a planted case and an expected line there.
 
 ## Release
-- Agent: edit `src/` and `modules/`, `node tools/bundle.js`; bump VERSION + CHANGELOG + `tests/v<version>.test.js`;
+- Agent: edit `src/` and `modules/`, `node tools/bundle.js`; bump VERSION + CHANGELOG + `tests/v<VERSION without dots>.test.js`;
+  before the release commit, replace a `(dev)` CHANGELOG date with the release date and rerun `node tools/bundle.js`;
   `PWSH=<pwsh> FULL=1 ./runall.sh` must end `VERDICT: PASS` with the deploy suite run; push the branch; confirm check-run
   `runall` = success on that SHA (`GET /repos/<owner>/<repo>/commits/<sha>/check-runs`); `git merge --ff-only` to main (not a
   fast-forward: rebase, rerun FULL=1); push main; re-read the rulesets (docs/RULESETS.md: 'main' + 'release tags' active, no
-  bypass, 'main' requires `runall`). Before the release commit, replace a `(dev)` CHANGELOG date with the release date.
+  bypass, 'main' requires `runall`).
   CI turns every `NOTICE` line into a check-run warning; read them before merging.
 - Owner, on the PC in the repo folder: `git pull; powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy.ps1 -Release <sha>`
   (`-DryRun` alone first if unsure; `clasp login` first unless the owner set `KEEP_CLASP_LOGIN=1`). It STOPs unless the checkout

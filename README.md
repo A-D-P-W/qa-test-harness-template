@@ -32,7 +32,7 @@ placeholder script IDs and runs runall there, the way a new project's first bran
 |---|---|
 | `typecheck` | Calls to Apps Script members that do not exist, checked against Google's published types (`tests/typecheck/`, typescript and @types/google-apps-script pinned by integrity hash). Mocks cannot catch this. |
 | `v368` (scope map) | Code that calls an Apps Script service whose OAuth scope is missing from `appsscript.json`. The check walks the AST of the code the project can reach, so aliasing (`const A = DriveApp`) and optional chaining are covered. Any service with no row in its NEEDS table fails. Code that reaches a service without naming it (the global object, `Reflect`, `eval`/`Function`, `this[...]`, `.constructor`, property-descriptor lookups) fails too, and every run re-checks that rule against every known bypass form and a set of legitimate forms, and prints both counts (L100). Four review rounds each found new bypasses, and a name produced by running code (for example `['constr', 'uctor'].join('')`) is a documented residual. It is a lint against accidental omissions, not a sandbox: the manifest is what Google enforces at run time. |
-| `v010` | The example project's own tests. Each version adds a `tests/v<version>.test.js`. |
+| `v010` | The example project's own tests. Each version adds a `tests/v<VERSION without dots>.test.js` (0.1.1: `tests/v011.test.js`). |
 | `deploy` | `deploy.ps1`, the only release path, tested against real git repositories and a fake `clasp` CLI. The fake is modelled on the source of clasp 3.4.1. Each test asserts which stage stopped the release, not only that it stopped. |
 | `guards` (`tools/guards.js`) | Module rules, checked on the AST: a module reads no consumer globals and calls only the services its contract lists; every consumer has a contract test; module versions are immutable once released. |
 | runall GUARDs | Checks on the test suite itself, listed below. |
@@ -91,14 +91,16 @@ in a fixture module (`tools/selftest/Fixture/`), and fails if any check stays si
 
 ## Start a project from it
 
-1. Copy the tracked files into a new private repository (`git init -b main`). Record the template commit in
+1. Copy the tracked files into a new private repository: `git init -b main`, then
+   `git -C <template> archive HEAD | tar -x`. Record the template commit in
    `docs/adr/0001-start-from-template.md`.
 2. Fill in `CLAUDE.md` and the header of `src/App.main.gs`. Replace the `(dev)` CHANGELOG date with today's date, then run
    `node tools/bundle.js`.
-3. Create the Apps Script project. Put its script ID into `deploy.ps1` (`$PinnedScriptId`) and `.clasp.json` in one
+3. Create the Apps Script project and copy its script ID from the editor's Project Settings. Put it into `deploy.ps1` (`$PinnedScriptId`) and `.clasp.json` in one
    reviewed commit.
 4. In a commit of its own, set `last_review_commit` in `tests/workflow_review.json` to the first commit's SHA and
-   `last_review_date` to today.
+   `last_review_date` to today. Until this commit, `./runall.sh` on `main` fails the GUARD
+   `last_review_commit is not a commit on main`.
 5. Run `PWSH=pwsh FULL=1 ./runall.sh` and expect `VERDICT: PASS`. Push `main`, wait for check-run `runall` to succeed,
    then apply the two rulesets in `docs/RULESETS.md`. They require that check, so applying them first would block the
    first push.
