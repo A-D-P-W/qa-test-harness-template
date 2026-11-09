@@ -52,6 +52,7 @@
 - typecheck, module GUARDs and the deploy suite: SKIPPED when their tools are missing, a FAIL under FULL=1.
 - `bash tools/guard_selftest.sh` (CI) makes each GUARD fire on a planted violation in a scratch copy (L101). A new GUARD
   gets a planted case and an expected line there.
+- Shell scripts quote every expansion; CI runs `shellcheck` on every tracked `*.sh` at its default severity (L104).
 
 ## Release
 - Agent: edit `src/` and `modules/`, `node tools/bundle.js`; bump VERSION + CHANGELOG + `tests/v<VERSION without dots>.test.js`;

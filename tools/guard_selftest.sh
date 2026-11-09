@@ -3,7 +3,8 @@
 # a violation planted in a scratch copy, and the same copy without the violations must pass. A GUARD that nothing makes
 # fire can be broken (a regex typo, a deleted line) and every run stays green.
 # Usage: bash tools/guard_selftest.sh   Exit 0 = the clean copy passes and every expected line appears; 1 otherwise.
-# Three runs of runall in scratch git copies (deleted afterwards): clean (on a branch), planted (on a branch), planted on main.
+# Four runs of runall in scratch git copies (deleted afterwards): clean (on a branch), from a folder whose path has a
+# space (L104), planted (on a branch), planted on main.
 # The deploy suite is not run (PWSH points nowhere): tests/deploy.test.sh tests deploy.ps1, not the GUARDs.
 # tools/selftest/Fixture/ is a module used only here, so tools/guards.js checks at least one real module.
 D=$(cd "$(dirname "$0")/.." && pwd)
@@ -28,7 +29,7 @@ plant() {   # the violations; each line below is the trigger for one expected GU
       '// Date.now() - 2 * 3600e3' "// ok(VER === '0.1.0')"; } > "$C/tests/v369.test.js"
   echo 'process.exit(2);' > "$C/tests/v901.test.js"; echo 'process.exit(1);' > "$C/tests/v902.test.js"
   echo 'console.log("FAIL planted"); process.exit(1);' > "$C/tests/v903.test.js"
-  echo 'console.log("PASS ok"); console.log("FAIL planted cr\rsecond part"); process.exit(1);' > "$C/tests/v904.test.js"   # L102
+  printf '%s\n' 'console.log("PASS ok"); console.log("FAIL planted cr\rsecond part"); process.exit(1);' > "$C/tests/v904.test.js"   # L102
   printf 'v010 | FAIL nothing prints this line\nno separator here\n' >> "$C/tests/known_open.txt"
   sed -i 's/"threshold_commits": 8/"threshold_commits": 9/' "$C/tests/workflow_review.json"
   sed -i "s/^const VERSION = '[^']*';/const VERSION = '0.1.1';/" "$C/src/App.main.gs"
@@ -41,6 +42,14 @@ copy clean selftest; run clean
 expect clean 'VERDICT: PASS - no regressions'
 expect clean 'OK module guards: '
 grep -qE 'OK module guards: [1-9]' "$W/clean.out" || { echo "FAIL clean: tools/guards.js checked no module"; fail=$((fail+1)); }
+
+# L104: runall from "code old/repo" next to a folder "code". An unquoted path once split there, and `rm -rf $O` deleted
+# the sibling folder. The canary must survive and the run must still pass.
+mkdir -p "$W/code"; echo keep > "$W/code/CANARY.txt"
+copy "code old/repo" selftest; run "code old/repo"
+expect "code old/repo" 'VERDICT: PASS - no regressions'
+if [ -f "$W/code/CANARY.txt" ]; then echo "PASS a path with a space: the sibling folder's canary survived"; pass=$((pass+1))
+else echo "FAIL a path with a space: runall deleted the sibling folder $W/code (L104)"; fail=$((fail+1)); fi
 
 copy planted selftest; plant planted; run planted
 expect planted 'GUARD tests/helper.js looks like a test but runall never runs it'

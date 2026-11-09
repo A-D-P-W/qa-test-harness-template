@@ -10,12 +10,12 @@
 # Writes out/ (untracked; safe to delete).
 D=$(cd "$(dirname "$0")" && pwd); O=$D/out
 export TZ=${TZ:-America/Los_Angeles}
-rm -rf $O; mkdir -p $O; : > $O/_fails.txt; : > $O/_suites.txt
-sum(){ local rc=${3:-$?}; echo "$1" >> $O/_suites.txt; echo "== $1: PASS=$(grep -cE '^ *PASS' $2) FAIL=$(grep -cE '^ *(FAIL|BUG|LEAK) ' $2) RISK=$(grep -c '^ *RISK' $2)$([ $rc -gt 1 ] && echo '  CRASHED')"
-       grep -E '^ *(FAIL|BUG|LEAK|RISK) ' $2 | sed "s/^ */[$1] /" >> $O/_fails.txt
-       grep -qE '^(Error|.*Error:|node:internal)' $2 && echo "[$1] FAIL suite crashed: $(grep -m1 -E 'Error' $2)" >> $O/_fails.txt
-       [ $rc -gt 1 ] && echo "[$1] FAIL suite crashed: exit $rc" >> $O/_fails.txt
-       [ $rc = 1 ] && ! grep -qE '^ *(FAIL|BUG|LEAK|RISK) ' $2 && echo "[$1] FAIL suite exited 1 with no FAIL line" >> $O/_fails.txt; true; }
+rm -rf -- "${O:?}"; mkdir -p "$O"; : > "$O/_fails.txt"; : > "$O/_suites.txt"
+sum(){ local rc=${3:-$?}; echo "$1" >> "$O/_suites.txt"; echo "== $1: PASS=$(grep -cE '^ *PASS' "$2") FAIL=$(grep -cE '^ *(FAIL|BUG|LEAK) ' "$2") RISK=$(grep -c '^ *RISK' "$2")$([ "$rc" -gt 1 ] && echo '  CRASHED')"
+       grep -E '^ *(FAIL|BUG|LEAK|RISK) ' "$2" | sed "s/^ */[$1] /" >> "$O/_fails.txt"
+       grep -qE '^(Error|.*Error:|node:internal)' "$2" && echo "[$1] FAIL suite crashed: $(grep -m1 -E 'Error' "$2")" >> "$O/_fails.txt"
+       [ "$rc" -gt 1 ] && echo "[$1] FAIL suite crashed: exit $rc" >> "$O/_fails.txt"
+       [ "$rc" = 1 ] && ! grep -qE '^ *(FAIL|BUG|LEAK|RISK) ' "$2" && echo "[$1] FAIL suite exited 1 with no FAIL line" >> "$O/_fails.txt"; true; }
 # FULL: 1 = release run; unset or 0 = normal run; anything else stops.
 case "${FULL:-}" in ""|0) FULL="" ;; 1) ;; *) echo "runall: FULL must be 1, 0 or unset (got '$FULL')"; exit 2 ;; esac
 # The root project (@out without a folder) and every other project (@out <dir>/<File>.gs), from deploy/*.files.
@@ -26,28 +26,28 @@ F=$D/$B; export MTD_GS=$F
 echo "-- suites ($B)"
 # Type check against @types/google-apps-script (pinned; tools cached; exit 3 = unavailable). Runs BEFORE the v* suites:
 # it installs acorn, which the scope map and module GUARDs need (CI starts with no cache).
-MTD_GS=$F bash $D/tests/typecheck/run.sh > $O/typecheck.txt 2>&1; tcrc=$?
-if [ $tcrc = 3 ]; then echo "== typecheck: SKIPPED ($(head -1 $O/typecheck.txt))"; [ -n "$FULL" ] && echo "[typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> $O/_fails.txt
-else sum typecheck $O/typecheck.txt $tcrc; fi
-for t in $D/tests/v[0-9]*.test.js; do [ -e "$t" ] || continue; n=$(basename $t .test.js); SRC=$F node $t > $O/$n.txt 2>&1; sum $n $O/$n.txt; done
-if command -v "${PWSH:-pwsh}" >/dev/null 2>&1; then bash $D/tests/deploy.test.sh > $O/deploy.txt 2>&1; sum deploy $O/deploy.txt
+MTD_GS="$F" bash "$D/tests/typecheck/run.sh" > "$O/typecheck.txt" 2>&1; tcrc=$?
+if [ "$tcrc" = 3 ]; then echo "== typecheck: SKIPPED ($(head -1 "$O/typecheck.txt"))"; [ -n "$FULL" ] && echo "[typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> "$O/_fails.txt"
+else sum typecheck "$O/typecheck.txt" "$tcrc"; fi
+for t in "$D"/tests/v[0-9]*.test.js; do [ -e "$t" ] || continue; n=$(basename "$t" .test.js); SRC="$F" node "$t" > "$O/$n.txt" 2>&1; sum "$n" "$O/$n.txt"; done
+if command -v "${PWSH:-pwsh}" >/dev/null 2>&1; then bash "$D/tests/deploy.test.sh" > "$O/deploy.txt" 2>&1; sum deploy "$O/deploy.txt"
 else echo "== deploy: SKIPPED (PowerShell not found as ${PWSH:-pwsh}; set PWSH=<path to pwsh> to run deploy.ps1 tests)"
-     [ -n "$FULL" ] && echo "[deploy] FAIL suite not run: FULL=1 (release) needs PowerShell for tests/deploy.test.sh" >> $O/_fails.txt; fi
+     [ -n "$FULL" ] && echo "[deploy] FAIL suite not run: FULL=1 (release) needs PowerShell for tests/deploy.test.sh" >> "$O/_fails.txt"; fi
 # Consumer-driven contract tests and the module GUARDs (a)(b)(c) — acorn comes with the type check tools
-for t in $D/tests/contract/*.test.js; do [ -e "$t" ] || continue; n=contract.$(basename $t .test.js); node $t > $O/$n.txt 2>&1; sum $n $O/$n.txt; done
-node $D/tools/guards.js > $O/_guards.txt 2>&1; grc=$?
-if [ $grc = 3 ]; then echo "== guards: SKIPPED ($(head -1 $O/_guards.txt))"; [ -n "$FULL" ] && echo "[guards] FAIL module guards not run: FULL=1 (release) needs them" >> $O/_fails.txt
-else echo "== guards: $(tail -1 $O/_guards.txt)"; grep "^NOTICE" $O/_guards.txt
-     if [ $grc != 0 ] && ! grep -q '^GUARD ' $O/_guards.txt; then echo "[guards] FAIL tools/guards.js exited $grc with no GUARD line (crash): $(tail -1 $O/_guards.txt | cut -c1-120)" >> $O/_fails.txt; fi; fi
+for t in "$D"/tests/contract/*.test.js; do [ -e "$t" ] || continue; n=contract.$(basename "$t" .test.js); node "$t" > "$O/$n.txt" 2>&1; sum "$n" "$O/$n.txt"; done
+node "$D/tools/guards.js" > "$O/_guards.txt" 2>&1; grc=$?
+if [ "$grc" = 3 ]; then echo "== guards: SKIPPED ($(head -1 "$O/_guards.txt"))"; [ -n "$FULL" ] && echo "[guards] FAIL module guards not run: FULL=1 (release) needs them" >> "$O/_fails.txt"
+else echo "== guards: $(tail -1 "$O/_guards.txt")"; grep "^NOTICE" "$O/_guards.txt"
+     if [ "$grc" != 0 ] && ! grep -q '^GUARD ' "$O/_guards.txt"; then echo "[guards] FAIL tools/guards.js exited $grc with no GUARD line (crash): $(tail -1 "$O/_guards.txt" | cut -c1-120)" >> "$O/_fails.txt"; fi; fi
 # Every other project (@out <dir>/<File>.gs) runs its own suites, the scope map and the type check on its own bundle.
-while read -r PN PDIR POUT PSRC; do
+while read -r PN PDIR POUT _; do
   [ "$PDIR" = . ] && continue
   echo "-- project $PN ($POUT)"
   for t in "$D/$PDIR"/tests/*.test.js; do [ -e "$t" ] || continue; n=$PDIR.$(basename "$t" .test.js); SRC="$D/$POUT" MTD_GS="$D/$POUT" node "$t" > "$O/$n.txt" 2>&1; sum "$n" "$O/$n.txt"; done
   SRC="$D/$POUT" node "$D/tests/v368.test.js" > "$O/$PDIR.v368.txt" 2>&1; sum "$PDIR.v368" "$O/$PDIR.v368.txt"
   MTD_GS="$D/$POUT" bash "$D/tests/typecheck/run.sh" > "$O/$PDIR.typecheck.txt" 2>&1; tcrc=$?
-  if [ $tcrc = 3 ]; then echo "== $PDIR.typecheck: SKIPPED"; [ -n "$FULL" ] && echo "[$PDIR.typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> $O/_fails.txt
-  else sum "$PDIR.typecheck" "$O/$PDIR.typecheck.txt" $tcrc; fi
+  if [ "$tcrc" = 3 ]; then echo "== $PDIR.typecheck: SKIPPED"; [ -n "$FULL" ] && echo "[$PDIR.typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> "$O/_fails.txt"
+  else sum "$PDIR.typecheck" "$O/$PDIR.typecheck.txt" "$tcrc"; fi
 done < "$O/_projects.txt"
 # Verdict: every FAIL/BUG/LEAK/RISK line must equal an allowance entry; every entry must match; guards must hold.
 python3 - "$O" "$D" <<'PY'

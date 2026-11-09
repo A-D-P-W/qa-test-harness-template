@@ -13,8 +13,8 @@ trap 'rm -rf "$TP"' EXIT
 (cd "$D" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$TP" || { echo "template_check: FAIL could not copy the tracked files"; exit 2; }
 sed -i "s/^\$PinnedScriptId = '[^']*'/\$PinnedScriptId = '1TemplateCheckPinXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'/" "$TP/deploy.ps1"
 sed -i 's/"scriptId": *"[^"]*"/"scriptId": "1TemplateCheckPinXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"/' "$TP/.clasp.json"
-grep -q "^\$PinnedScriptId = '1TemplateCheckPin" "$TP/deploy.ps1" && grep -q '"scriptId": "1TemplateCheckPin' "$TP/.clasp.json" \
-  || { echo "template_check: FAIL the placeholder pin did not take in deploy.ps1 or .clasp.json"; exit 2; }
+if ! { grep -q "^\$PinnedScriptId = '1TemplateCheckPin" "$TP/deploy.ps1" && grep -q '"scriptId": "1TemplateCheckPin' "$TP/.clasp.json"; }; then
+  echo "template_check: FAIL the placeholder pin did not take in deploy.ps1 or .clasp.json"; exit 2; fi
 (cd "$TP" && git init -q -b template-check && git add -A && git -c user.email=t@t.invalid -c user.name=t commit -qm template) >/dev/null 2>&1 \
   || { echo "template_check: FAIL could not make the scratch git copy"; exit 2; }
 echo "template_check: scratch copy of $(cd "$TP" && git ls-files | wc -l) tracked files on branch template-check"
