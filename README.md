@@ -89,7 +89,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 | Scope map and types | `tests/v368.test.js`, `tools/reachable.js`, `tools/ast.js`, `tests/typecheck/` |
 | Modules | `tools/bundle.js`, `tools/projects.js`, `tools/guards.js`, `docs/MODULES.md`, `docs/ARCHITECTURE.md` |
 | Release | `deploy.ps1`, `tests/deploy.test.sh`, `tests/deploy/fake-clasp.js`, `.clasp.json`, `.claspignore` |
-| CI and GitHub | `.github/workflows/tests.yml`, `.github/workflows/scorecard.yml` (OpenSSF Scorecard: on pull requests to main, pushes to main and weekly; the score is in the job summary), `docs/RULESETS.md` |
+| CI and GitHub | `.github/workflows/tests.yml`, `.github/workflows/scorecard.yml` (OpenSSF Scorecard: on pull requests to main, pushes to main and weekly; the score is in the job summary), `.github/dependabot.yml`, `SECURITY.md`, `docs/RULESETS.md` |
 | Governance | `CLAUDE.md` (agent-instruction skeleton), `docs/adr/`, `tests/workflow_review.json`, `tools/review_count.py` |
 
 ## Start a project from it
