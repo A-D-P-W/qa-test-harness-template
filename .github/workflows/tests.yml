@@ -34,12 +34,18 @@ jobs:
           else
             PWSH=pwsh FULL=1 ./runall.sh 2>&1 | tee runall-output.txt
           fi
+      # L101: each GUARD must fire on a planted violation (scratch copies; the deploy suite is not run there)
+      - name: GUARD self-test
+        run: |
+          set -o pipefail
+          bash tools/guard_selftest.sh 2>&1 | tee guard-selftest-output.txt
       # Every problem line becomes a check-run annotation, readable through the checks
       # API without log access (the agent session cannot download job logs).
       - name: Report problems as annotations
         if: failure()
         run: |
           grep -aE '^(UNEXPECTED|GUARD|VERDICT)|^(STALE|BAD) ENTRY|CRASHED' runall-output.txt | head -40 | while IFS= read -r l; do echo "::error title=runall::${l//%/%25}"; done || true
+          grep -a '^FAIL' guard-selftest-output.txt 2>/dev/null | head -40 | while IFS= read -r l; do echo "::error title=guard self-test::${l//%/%25}"; done || true
       # 3.10.0 (template review M2): NOTICE lines (template drift, review due, (dev) date) become check-run warnings on every
       # run, so they are readable through the checks API — they never fail the run.
       - name: Report notices as warnings

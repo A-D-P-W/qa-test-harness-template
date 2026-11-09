@@ -48,6 +48,8 @@
   lines, each with a fix version or owner decision). Entry format `<suite> | <exact line>`; an entry that matches nothing fails
   the run. Adding a line to either needs the owner's OK.
 - typecheck, module GUARDs and the deploy suite: SKIPPED when their tools are missing, a FAIL under FULL=1.
+- `bash tools/guard_selftest.sh` (CI) makes each GUARD fire on a planted violation in a scratch copy (L101). A new GUARD
+  gets a planted case and an expected line there.
 
 ## Release
 - Agent: edit `src/` and `modules/`, `node tools/bundle.js`; bump VERSION + CHANGELOG + `tests/v<version>.test.js`;

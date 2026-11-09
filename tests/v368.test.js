@@ -223,6 +223,9 @@ if (ACORN) {
     'function run(){ const k=1?"constructor":"x"; return [].map[k]("return Drive"+"App")(); }', 'function run(){ return ({}).__lookupGetter__("__proto__").call(()=>{}); }',
     'function run(){ const n="getPrototypeOf"; return Object[n](()=>{}); }', 'function run(x){ return x["__pro"+"to__"]; }',
     'function run(){ with([].map){ return constructor("return Drive"+"App")(); } }',
+    // round 5 (test-design review, driven): with the `.__proto__` member rule deleted, every form above still passed, so
+    // nothing pinned that rule. This form is flagged by it alone.
+    'function run(o){ return o.__proto__; }',
   ];
   const LEGIT = [
     'function run(){ var o={eval:1}; return o.eval; }', 'class Box { set(k, v) { this[k] = v; } }', 'function run(){ const me={a:1}; return me["a"]; }',
