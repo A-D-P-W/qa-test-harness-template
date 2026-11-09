@@ -79,6 +79,26 @@ for (const [re, scopes] of NEEDS) {
   ok(scopes.some(s => granted.has(s)), `${re.source} is called and the manifest grants ${scopes.join(' or ')}`);
 }
 ok(!/\bSession\.(getEffectiveUser|getActiveUser)\s*\(/.test(code), 'no Session user lookup in code (single-account: use MY_ADDRESS)');
+// Row self-test (L105): the rows above run only on code that calls a service. The template's App.gs calls none, so a
+// broken row (a typo in its regex or its scope) would pass every run. Each sample below is a call its row must match,
+// and the scope it names must be one of that row's scopes, so with that scope missing from a manifest the row fails.
+const ROW_SAMPLES = [
+  ['Session.getEffectiveUser()', 'userinfo.email'], ['Session.getActiveUser()', 'userinfo.email'],
+  ['UrlFetchApp.fetch(u)', 'script.external_request'], ['MailApp.sendEmail(m)', 'script.send_mail'],
+  ['CalendarApp.getDefaultCalendar()', 'calendar'], ['DocumentApp.create(n)', 'documents'],
+  ['GmailApp.search(q)', 'gmail.readonly'], ['GmailApp.getInboxThreads()', 'https://mail.google.com/'],
+  ['GmailApp.sendEmail(m)', 'https://mail.google.com/'], ['Gmail.Users.Messages.get(u, id)', 'gmail.readonly'],
+  ['Gmail.Users.Labels.list(u)', 'gmail.modify'], ['Calendar.Events.insert(e, id)', 'calendar.events'],
+  ['Calendar.Calendars.insert(c)', 'calendar.app.created'], ['Calendar.Calendars.get(id)', 'calendar.readonly'],
+  ['Calendar.Acl.list(id)', 'calendar.acls'], ['Calendar.CalendarList.list()', 'calendar.readonly'],
+  ['DriveApp.getRootFolder()', 'drive'], ['Drive.Files.list()', 'drive'], ['SpreadsheetApp.openById(id)', 'spreadsheets'],
+  ['ScriptApp.newTrigger(f)', 'script.scriptapp'],
+];
+const full = x => /^https:/.test(x) ? x : 'https://www.googleapis.com/auth/' + x;
+const rowMiss = ROW_SAMPLES.filter(([call, scope]) => !NEEDS.some(([re, scopes]) => re.test(call) && scopes.includes(full(scope))));
+const rowless = NEEDS.filter(([re]) => !ROW_SAMPLES.some(([call]) => re.test(call)));
+ok(!rowMiss.length && !rowless.length, 'every NEEDS row matches its ' + ROW_SAMPLES.length + ' sample calls with the scope it names, and every row has a sample' +
+  (rowMiss.length ? '; NO ROW FOR: ' + rowMiss.map(([c, s]) => c + ' -> ' + s).join(', ') : '') + (rowless.length ? '; NO SAMPLE FOR: ' + rowless[0][0].source : ''));
 // 3.9.7 workflow review H1: the regex rows see only `Service.` text, so an alias (`const { Events } = Calendar`, `const A = DriveApp`)
 // would hide a call. Every service name in reachable code must be the object of a plain member access (or a typeof operand).
 if (!ACORN && process.env.FULL) ok(false, 'parser (acorn) unavailable: the alias, chain and L100 checks did not run (FULL=1 needs them)');
