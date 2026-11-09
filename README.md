@@ -117,3 +117,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
   replaced by placeholders (Vendor-X, Platform-Y).
 - On Windows with Git Bash, set `MTD_TC_CACHE` to a path in `C:/...` form. `tests/typecheck/run.sh` passes the cache path
   to tsc, and Windows node cannot resolve a `/c/...` path.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
