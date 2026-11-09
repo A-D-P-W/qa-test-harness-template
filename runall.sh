@@ -53,7 +53,8 @@ done < "$O/_projects.txt"
 python3 - "$O" "$D" <<'PY'
 import sys, os, re, glob, hashlib, subprocess, json
 O, D = sys.argv[1], sys.argv[2]
-fails = [l.rstrip('\n') for l in open(os.path.join(O, '_fails.txt'), encoding='utf-8') if l.strip()]
+# newline='\n': a bare \r inside a FAIL line (Windows tool output) must not split it into a line with no [suite] (L102)
+fails = [l.rstrip('\r\n').replace('\r', '\\r') for l in open(os.path.join(O, '_fails.txt'), encoding='utf-8', errors='replace', newline='\n') if l.strip()]
 entries = []
 for fn in ('expected_deployed.txt', 'known_open.txt'):
     p = os.path.join(D, 'tests', fn)
@@ -65,7 +66,9 @@ for fn in ('expected_deployed.txt', 'known_open.txt'):
         suite, text = body.split(' | ', 1); entries.append((fn, n, suite.strip(), text))
 bad, used = [], set()
 for f in fails:
-    m = re.match(r'^\[([^\]]+)\] (.*)$', f); suite, text = m.group(1), m.group(2)
+    m = re.match(r'^\[([^\]]+)\] (.*)$', f)
+    if not m: bad.append('GUARD malformed line in the failure list (no [suite] prefix): ' + f[:200]); continue
+    suite, text = m.group(1), m.group(2)
     hit = [i for i, e in enumerate(entries) if e[2] == suite and e[3] == text]
     if hit: used.update(hit)
     else: bad.append('UNEXPECTED ' + f)

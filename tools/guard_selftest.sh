@@ -28,6 +28,7 @@ plant() {   # the violations; each line below is the trigger for one expected GU
       '// Date.now() - 2 * 3600e3' "// ok(VER === '0.1.0')"; } > "$C/tests/v369.test.js"
   echo 'process.exit(2);' > "$C/tests/v901.test.js"; echo 'process.exit(1);' > "$C/tests/v902.test.js"
   echo 'console.log("FAIL planted"); process.exit(1);' > "$C/tests/v903.test.js"
+  echo 'console.log("PASS ok"); console.log("FAIL planted cr\rsecond part"); process.exit(1);' > "$C/tests/v904.test.js"   # L102
   printf 'v010 | FAIL nothing prints this line\nno separator here\n' >> "$C/tests/known_open.txt"
   sed -i 's/"threshold_commits": 8/"threshold_commits": 9/' "$C/tests/workflow_review.json"
   sed -i "s/^const VERSION = '[^']*';/const VERSION = '0.1.1';/" "$C/src/App.main.gs"
@@ -55,6 +56,7 @@ expect planted 'GUARD suite v901 passed nothing (did it run?)'
 expect planted 'UNEXPECTED [v901] FAIL suite crashed: exit 2'
 expect planted 'UNEXPECTED [v902] FAIL suite exited 1 with no FAIL line'
 expect planted 'UNEXPECTED [v903] FAIL planted'
+expect planted 'UNEXPECTED [v904] FAIL planted cr\rsecond part'
 expect planted 'STALE ENTRY known_open.txt:'
 expect planted 'BAD ENTRY known_open.txt:'
 expect planted 'GUARD tests/workflow_review.json thresholds/paths differ from runall'
