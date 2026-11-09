@@ -127,6 +127,16 @@ for s in suites:
     h = hashlib.sha256('\n'.join(lines).encode()).hexdigest()
     if h in seen: bad.append(f'GUARD suites {seen[h]} and {s} report identical results (duplicate suite?)')
     else: seen[h] = s
+# L106: a count written by hand must equal the count of what it names. README "lists N mistake classes: A from the source
+# project and B found here" is checked against tests/LESSONS.md rows (seeded: below L100; this project's own: L100 and up).
+_rd, _lf = os.path.join(D, 'README.md'), os.path.join(D, 'tests', 'LESSONS.md')
+if os.path.exists(_lf):
+    _rows = [int(x) for x in re.findall(r'^\| L(\d+) \|', open(_lf, encoding='utf-8').read(), re.M)]
+    _own = sum(1 for x in _rows if x >= 100)
+    if len(set(_rows)) != len(_rows): bad.append('GUARD tests/LESSONS.md numbers a lesson twice: ' + ', '.join('L%d' % x for x in sorted(set(x for x in _rows if _rows.count(x) > 1))))
+    for _m in re.finditer(r'lists\s+(\d+)\s+mistake\s+classes:\s+(\d+)\s+from\s+the\s+source\s+project\s+and\s+(\d+)\s+found\s+here', open(_rd, encoding='utf-8').read() if os.path.exists(_rd) else ''):
+        if (int(_m.group(1)), int(_m.group(2)), int(_m.group(3))) != (len(_rows), len(_rows) - _own, _own):
+            bad.append(f'GUARD README.md says {_m.group(1)} mistake classes ({_m.group(2)} seeded, {_m.group(3)} found here) but tests/LESSONS.md has {len(_rows)} rows ({len(_rows) - _own} below L100, {_own} from L100 on)')
 n_unexp = sum(1 for b in bad if b.startswith('UNEXPECTED'))
 # The review trigger's thresholds and paths are fixed; changing them is a CLAUDE.md change, not a quiet edit
 _w = json.load(open(os.path.join(D, 'tests', 'workflow_review.json')))

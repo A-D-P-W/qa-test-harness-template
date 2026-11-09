@@ -32,6 +32,8 @@ plant() {   # the violations; each line below is the trigger for one expected GU
   printf '%s\n' 'console.log("PASS ok"); console.log("FAIL planted cr\rsecond part"); process.exit(1);' > "$C/tests/v904.test.js"   # L102
   printf 'v010 | FAIL nothing prints this line\nno separator here\n' >> "$C/tests/known_open.txt"
   sed -i 's/"threshold_commits": 8/"threshold_commits": 9/' "$C/tests/workflow_review.json"
+  sed -i 's/lists \([0-9]*\) mistake classes/lists 1\1 mistake classes/' "$C/README.md"   # L106: a count that no longer matches
+  local dup; dup=$(grep '^| L100 |' "$C/tests/LESSONS.md"); printf '%s\n' "$dup" >> "$C/tests/LESSONS.md"   # L106: a lesson numbered twice
   sed -i "s/^const VERSION = '[^']*';/const VERSION = '0.1.1';/" "$C/src/App.main.gs"
   printf 'function useFixture_() { return fixtureClamp_(1); }\n' >> "$C/src/App.main.gs"
   printf 'function fixtureLeak_() { return globalThis; }\n' >> "$C/modules/Fixture/Fixture.gs"
@@ -69,6 +71,8 @@ expect planted 'UNEXPECTED [v904] FAIL planted cr\rsecond part'
 expect planted 'STALE ENTRY known_open.txt:'
 expect planted 'BAD ENTRY known_open.txt:'
 expect planted 'GUARD tests/workflow_review.json thresholds/paths differ from runall'
+expect planted 'GUARD README.md says 1'
+expect planted 'GUARD tests/LESSONS.md numbers a lesson twice: L100'
 expect planted 'GUARD STALE App.gs differs from a fresh build'
 expect planted 'GUARD App VERSION 0.1.1 has no tests/v011.test.js'
 expect planted 'GUARD App VERSION 0.1.1 != top CHANGELOG line 0.1.0'
