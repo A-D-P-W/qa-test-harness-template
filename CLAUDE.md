@@ -13,7 +13,8 @@
   catches it. `runall.sh` — runs every suite and prints one VERDICT line. `.github/workflows/tests.yml` — CI: `FULL=1 ./runall.sh`
   on every push. `tests/typecheck/` — tsc type check (pinned lockfile).
 - `deploy.ps1` — the only way code reaches the live project (§ Release). Tests: `tests/deploy.test.sh` (real git, fake clasp
-  modelled on clasp 3.4.1's source; runall runs it when PowerShell is available, and `FULL=1` fails without it).
+  modelled on clasp 3.4.1's source; runall runs it when PowerShell is available, and `FULL=1` fails without it; CI also
+  runs it on Windows in the `deploy-windows` job, L103).
 - `docs/PATTERNS.md` — the safety patterns to build in (log before mutate, dry run, owner pins, preview + approve, digest + alert).
 
 ## Owner decisions
