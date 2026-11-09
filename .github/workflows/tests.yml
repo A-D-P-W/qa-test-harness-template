@@ -52,3 +52,28 @@ jobs:
         if: always()
         run: |
           grep -a '^NOTICE' runall-output.txt | head -40 | while IFS= read -r l; do echo "::warning title=runall::${l//%/%25}"; done || true
+
+  # L103: deploy.ps1 runs on the owner's Windows PC, so its 79 tests also run on Windows (Git Bash + PowerShell 7 +
+  # a .cmd fake clasp). windows-2025 is Windows Server 2025, a fresh VM per job; it is not Windows 11 Home.
+  deploy-windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1, pinned by commit (same as runall)
+        with:
+          persist-credentials: false
+      - name: deploy.ps1 tests on Windows
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          git config --global core.autocrlf false
+          uname -s; node --version; pwsh --version
+          set -o pipefail
+          PWSH=pwsh bash tests/deploy.test.sh 2>&1 | tee deploy-windows-output.txt
+      - name: Report problems as annotations
+        if: failure()
+        run: |
+          grep -a '^FAIL' deploy-windows-output.txt | head -40 | while IFS= read -r l; do echo "::error title=deploy (Windows)::${l//%/%25}"; done || true

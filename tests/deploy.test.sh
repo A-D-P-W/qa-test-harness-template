@@ -6,8 +6,15 @@ D=$(cd "$(dirname "$0")/.." && pwd); PW=${PWSH:-pwsh}
 command -v "$PW" >/dev/null || { echo "SKIP deploy tests: PowerShell not found (set PWSH)"; exit 3; }
 W=$(mktemp -d) || exit 1; [ -n "$W" ] && [ -d "$W" ] || exit 1
 trap 'rm -rf -- "${W:?}"' EXIT
-mkdir -p "$W/bin"; printf '#!/bin/bash\nexec node %s "$@"\n' "$D/tests/deploy/fake-clasp.js" > "$W/bin/clasp"; chmod +x "$W/bin/clasp"
+# Windows (Git Bash): PowerShell cannot run an extensionless bash script ("Cannot run a document in the middle of a
+# pipeline"), so the fake clasp is a .cmd there, and every path handed to pwsh and node is written C:/... (cygpath -m),
+# which bash, PowerShell and node all read the same way (L103).
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN=1; W=$(cygpath -m "$W"); D=$(cygpath -m "$D") ;; *) WIN= ;; esac
+mkdir -p "$W/bin"
+if [ -n "$WIN" ]; then printf '@node "%s" %%*\r\n' "$D/tests/deploy/fake-clasp.js" > "$W/bin/clasp.cmd"
+else printf '#!/bin/bash\nexec node %s "$@"\n' "$D/tests/deploy/fake-clasp.js" > "$W/bin/clasp"; chmod +x "$W/bin/clasp"; fi
 export PATH="$W/bin:$PATH" FAKE_LOG="$W/calls.log" FAKE_LIVE_ROOT="$W/live" TMPDIR="$W/tmp"
+[ -n "$WIN" ] && export TEMP="$W/tmp" TMP="$W/tmp"
 PIN=1TemplateTestPinXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX; VER=$(grep -oP "const VERSION = '\K[0-9.]+" "$D/App.gs")
 LIVE="$W/live/$PIN"; pass=0; fail=0; n=0
 ok(){ n=$((n+1)); if eval "$1"; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2  -- rc=$rc out: $(echo "$out" | tr '\n' ' ' | cut -c1-400)"; fail=$((fail+1)); fi; }
