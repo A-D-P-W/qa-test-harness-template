@@ -6,8 +6,9 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.4';
+const VERSION = '0.1.5';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.5  2026-11-11  Synced from MailToDrive 3.12.6: FULL also reruns every suite 365 days ahead (suite clock365, M101).
  * 0.1.4  2026-11-11  Synced from MailToDrive: FULL reruns every suite 90 days ahead (tools/clockahead.js, suite clock90);
  *                    seeded lessons L85-L90, L98, L99 and M100 (MailToDrive L100+ rows seeded as M<n>); 3 module rows.
  * 0.1.3  2026-11-11  Type-check tools bumped (Dependabot #4: typescript 7.0.2, @types/google-apps-script 2.0.14, acorn

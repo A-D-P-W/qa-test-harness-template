@@ -58,6 +58,14 @@ if [ -n "$FULL" ] && [ -z "${MTD_CLOCK_AHEAD_DAYS:-}" ]; then
     grep -E '^(UNEXPECTED|GUARD|STALE ENTRY|BAD ENTRY)|CRASHED' "$O/_clock90_run.txt" | sed 's/^/FAIL clock +90 days: /'
     grep -q '^VERDICT:' "$O/_clock90_run.txt" || echo "FAIL clock +90 days: runall printed no VERDICT"; } > "$O/clock90.txt"
   sum clock90 "$O/clock90.txt"
+  # M101 (seeded from MailToDrive L101): and 365 days ahead. +90 alone missed fixtures that pass at +202 days and fail at +203
+  # in the source project; the year horizon flags them a year early. Both stay: a year-boundary or DST failure can show at
+  # one shift and not the other.
+  (env -u PWSH -u FULL MTD_OUT="$O/clock365" MTD_CLOCK_AHEAD_DAYS=365 NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $D/tools/clockahead.js" "$D/runall.sh") > "$O/_clock365_run.txt" 2>&1
+  { grep -q '^VERDICT: PASS' "$O/_clock365_run.txt" && echo "PASS every suite passes with the clock 365 days ahead ($(grep -c '^== ' "$O/_clock365_run.txt") suites)"
+    grep -E '^(UNEXPECTED|GUARD|STALE ENTRY|BAD ENTRY)|CRASHED' "$O/_clock365_run.txt" | sed 's/^/FAIL clock +365 days: /'
+    grep -q '^VERDICT:' "$O/_clock365_run.txt" || echo "FAIL clock +365 days: runall printed no VERDICT"; } > "$O/clock365.txt"
+  sum clock365 "$O/clock365.txt"
 fi
 # Verdict: every FAIL/BUG/LEAK/RISK line must equal an allowance entry; every entry must match; guards must hold.
 python3 - "$O" "$D" <<'PY'
