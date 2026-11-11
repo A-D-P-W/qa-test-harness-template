@@ -28,7 +28,7 @@
   (mocks hid three live-only bugs in MailToDrive, L4). Any new parser of untrusted input gets linear-time + fuzz checks (L5).
 - Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line
   at the top of the `/* CHANGELOG` block in `src/App.main.gs` (`<version>  <date or (dev)>  <change>`) and a
-  `tests/v<VERSION without dots>.test.js` (0.1.3: `tests/v013.test.js`), then `node tools/bundle.js`.
+  `tests/v<VERSION without dots>.test.js` (0.1.4: `tests/v014.test.js`), then `node tools/bundle.js`.
 - Every bug fix adds a guard for the bug's CLASS (a test or a runall GUARD), not only the case, plus a row in
   `tests/LESSONS.md` with its evidence. Lessons without evidence are not kept.
 - Rerun all suites (`./runall.sh`) after any change, and `FULL=1 ./runall.sh` before every push (L57).
@@ -51,6 +51,8 @@
   the run. Adding a line to either needs the owner's OK.
 - typecheck, module GUARDs and the deploy suite: SKIPPED when their tools are missing, a FAIL under FULL=1. `tests/v368.test.js`
   fails in every mode without its parser (L107).
+- `FULL=1` also reruns every suite with all clocks 90 days ahead (suite `clock90`, `tools/clockahead.js`, output in
+  `out/clock90/`), so a fixture with a fixed date fails 90 days before it ages out (M100). Date fixtures are relative to the clock.
 - `bash tools/guard_selftest.sh` (CI) makes each GUARD fire on a planted violation in a scratch copy (L101). A new GUARD
   gets a planted case and an expected line there.
 - Shell scripts quote every expansion; CI runs `shellcheck` on every tracked `*.sh` at its default severity (L104).

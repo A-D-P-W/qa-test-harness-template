@@ -3,9 +3,10 @@
 # a violation planted in a scratch copy, and the same copy without the violations must pass. A GUARD that nothing makes
 # fire can be broken (a regex typo, a deleted line) and every run stays green.
 # Usage: bash tools/guard_selftest.sh   Exit 0 = the clean copy passes and every expected line appears; 1 otherwise.
-# Four runs of runall in scratch git copies (deleted afterwards): clean (on a branch), from a folder whose path has a
-# space (L104), planted (on a branch), planted on main. Then two runs of tools/template_check.sh from checkouts on main
-# (L108): with a release date it passes with no NOTICE, with a (dev) date it fails.
+# Five runs of runall in scratch git copies (deleted afterwards): clean (on a branch), from a folder whose path has a
+# space (L104), planted (on a branch), planted on main, and one FULL run with a test that ages out (M100). Then two runs
+# of tools/template_check.sh from checkouts on main (L108): with a release date it passes with no NOTICE, with a (dev)
+# date it fails.
 # The deploy suite is not run (PWSH points nowhere): tests/deploy.test.sh tests deploy.ps1, not the GUARDs.
 # tools/selftest/Fixture/ is a module used only here, so tools/guards.js checks at least one real module.
 D=$(cd "$(dirname "$0")/.." && pwd)
@@ -38,6 +39,7 @@ plant() {   # the violations; each line below is the trigger for one expected GU
   sed -i 's/"threshold_commits": 8/"threshold_commits": 9/' "$C/tests/workflow_review.json"
   sed -i 's/lists \([0-9]*\) mistake classes/lists 1\1 mistake classes/' "$C/README.md"   # L106: a count that no longer matches
   local dup; dup=$(grep '^| L100 |' "$C/tests/LESSONS.md"); printf '%s\n' "$dup" >> "$C/tests/LESSONS.md"   # L106: a lesson numbered twice
+  dup=$(grep '^| M100 |' "$C/tests/LESSONS.md"); printf '%s\n' "$dup" >> "$C/tests/LESSONS.md"   # the same for a seeded M row
   sed -i "s/^const VERSION = '[^']*';/const VERSION = '9.9.9';/" "$C/src/App.main.gs"
   printf 'function useFixture_() { return fixtureClamp_(1); }\nfunction useBad_() { return badPub_(); }\n' >> "$C/src/App.main.gs"
   printf 'function fixtureLeak_() { return globalThis; }\nfunction fixtureUsesBad_() { return badPub_(); }\n' >> "$C/modules/Fixture/Fixture.gs"
@@ -82,7 +84,7 @@ expect planted 'STALE ENTRY known_open.txt:'
 expect planted 'BAD ENTRY known_open.txt:'
 expect planted 'GUARD tests/workflow_review.json thresholds/paths differ from runall'
 expect planted 'GUARD README.md says 1'
-expect planted 'GUARD tests/LESSONS.md numbers a lesson twice: L100'
+expect planted 'GUARD tests/LESSONS.md numbers a lesson twice: L100, M100'
 expect planted 'GUARD STALE App.gs differs from a fresh build'
 expect planted 'GUARD App VERSION 9.9.9 has no tests/v999.test.js'
 expect planted "GUARD App VERSION 9.9.9 != top CHANGELOG line $CUR"
@@ -155,6 +157,15 @@ expect main 'GUARD modules/Fixture: version 1.0.0 row changed after it reached m
 expect main 'GUARD modules/Fixture: changed since release/v0.0.1 but Version is still 1.0.0'
 expect main 'GUARD modules/Older: version 2.0.0 (on main) was removed from the version table'
 expect main 'GUARD modules/Older: Version 1.0.0 is lower than 2.0.0 at release/v0.0.1'
+
+# M100: FULL reruns every suite 90 days ahead, so a test with a fixed date 30 days out passes today and fails there.
+copy aging aging
+lim=$(node -e 'console.log(Date.now() + 30 * 864e5)')
+printf '%s\n' "if (Date.now() > $lim) { console.log('FAIL fixture aged out'); process.exit(1); }" "console.log('PASS fixture'); console.log('\n1 passed, 0 failed');" > "$W/aging/tests/v903.test.js"
+(cd "$W/aging" && git add -A && git -c user.email=t@t.invalid -c user.name=t commit -qm aging) >/dev/null 2>&1 || { echo "guard_selftest: FAIL could not commit the aging copy"; exit 1; }
+(cd "$W/aging" && env -u GITHUB_REF_NAME FULL=1 PWSH="$W/no-pwsh" ./runall.sh) > "$W/aging.out" 2>&1
+expect aging '== v903: PASS=1 FAIL=0'
+expect aging 'FAIL clock +90 days: UNEXPECTED [v903] FAIL fixture aged out'
 
 # L108: template_check.sh carries this checkout's branch into its scratch copy, so on main a (dev) top CHANGELOG line
 # fails the template itself. Both checkouts get their date set here, so the case does not depend on the current one.

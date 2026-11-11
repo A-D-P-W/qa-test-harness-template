@@ -26,6 +26,9 @@ its sha256 (`node tools/guards.js --sha <Module>`) and an ADR (GUARD (a)).
 | Text | Make untrusted strings safe for names, logs and HTML. | — |
 | Hash | Stable hashes for names and content. | — |
 | Dates | Date arithmetic and formatting. | — |
+| SecurityNames | Fail-closed test of whether a name looks like security codes, recovery keys or secrets. | — |
+| FileClassify | First-match-wins classification of a file from its metadata only (name, MIME type, times), against a consumer's rule table. | — |
+| SheetRecords | Write rows that may hold untrusted text into a Google Sheet as plain text, never as formulas. | — |
 | HtmlText | Turn untrusted HTML email bodies into plain text. | — |
 | PdfSafety | Classify an untrusted PDF as safe, soft-flagged or hard-blocked, without rendering it. | — |
 | SenderTrust | Decide whether an email's visible sender is authenticated by Google. | — |

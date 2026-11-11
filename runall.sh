@@ -8,7 +8,8 @@
 # a test file, no clock-offset time bombs, no two suites with identical results, RISK lines count like failures,
 # no stale allowance entries, no exact-VERSION asserts, a suite exiting >1 is a crash, no test-looking file left unrun.
 # Writes out/ (untracked; safe to delete).
-D=$(cd "$(dirname "$0")" && pwd); O=$D/out
+D=$(cd "$(dirname "$0")" && pwd); O=${MTD_OUT:-$D/out}
+case "$O" in "$D/out"|"$D/out/"*) ;; *) echo "runall: MTD_OUT must be inside $D/out (got '$O')"; exit 2 ;; esac   # M100: nested clock-ahead run
 export TZ=${TZ:-America/Los_Angeles}
 rm -rf -- "${O:?}"; mkdir -p "$O"; : > "$O/_fails.txt"; : > "$O/_suites.txt"
 sum(){ local rc=${3:-$?}; echo "$1" >> "$O/_suites.txt"; echo "== $1: PASS=$(grep -cE '^ *PASS' "$2") FAIL=$(grep -cE '^ *(FAIL|BUG|LEAK) ' "$2") RISK=$(grep -c '^ *RISK' "$2")$([ "$rc" -gt 1 ] && echo '  CRASHED')"
@@ -49,6 +50,15 @@ while read -r PN PDIR POUT _; do
   if [ "$tcrc" = 3 ]; then echo "== $PDIR.typecheck: SKIPPED"; [ -n "$FULL" ] && echo "[$PDIR.typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> "$O/_fails.txt"
   else sum "$PDIR.typecheck" "$O/$PDIR.typecheck.txt" "$tcrc"; fi
 done < "$O/_projects.txt"
+# M100 (seeded from MailToDrive L100): FULL reruns every suite with all clocks 90 days ahead (tools/clockahead.js), so a fixture with a
+# fixed date that ages out of a lookback window fails here 90 days before it would fail for real.
+if [ -n "$FULL" ] && [ -z "${MTD_CLOCK_AHEAD_DAYS:-}" ]; then
+  (env -u PWSH -u FULL MTD_OUT="$O/clock90" MTD_CLOCK_AHEAD_DAYS=90 NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $D/tools/clockahead.js" "$D/runall.sh") > "$O/_clock90_run.txt" 2>&1
+  { grep -q '^VERDICT: PASS' "$O/_clock90_run.txt" && echo "PASS every suite passes with the clock 90 days ahead ($(grep -c '^== ' "$O/_clock90_run.txt") suites)"
+    grep -E '^(UNEXPECTED|GUARD|STALE ENTRY|BAD ENTRY)|CRASHED' "$O/_clock90_run.txt" | sed 's/^/FAIL clock +90 days: /'
+    grep -q '^VERDICT:' "$O/_clock90_run.txt" || echo "FAIL clock +90 days: runall printed no VERDICT"; } > "$O/clock90.txt"
+  sum clock90 "$O/clock90.txt"
+fi
 # Verdict: every FAIL/BUG/LEAK/RISK line must equal an allowance entry; every entry must match; guards must hold.
 python3 - "$O" "$D" <<'PY'
 import sys, os, re, glob, hashlib, subprocess, json
@@ -128,15 +138,15 @@ for s in suites:
     if h in seen: bad.append(f'GUARD suites {seen[h]} and {s} report identical results (duplicate suite?)')
     else: seen[h] = s
 # L106: a count written by hand must equal the count of what it names. README "lists N mistake classes: A from the source
-# project and B found here" is checked against tests/LESSONS.md rows (seeded: below L100; this project's own: L100 and up).
+# project and B found here" is checked against tests/LESSONS.md rows (seeded: below L100 or M-numbered; this project's own: L100 and up).
 _rd, _lf = os.path.join(D, 'README.md'), os.path.join(D, 'tests', 'LESSONS.md')
 if os.path.exists(_lf):
-    _rows = [int(x) for x in re.findall(r'^\| L(\d+) \|', open(_lf, encoding='utf-8').read(), re.M)]
-    _own = sum(1 for x in _rows if x >= 100)
-    if len(set(_rows)) != len(_rows): bad.append('GUARD tests/LESSONS.md numbers a lesson twice: ' + ', '.join('L%d' % x for x in sorted(set(x for x in _rows if _rows.count(x) > 1))))
+    _rows = [(p, int(x)) for p, x in re.findall(r'^\| ([LM])(\d+) \|', open(_lf, encoding='utf-8').read(), re.M)]
+    _own = sum(1 for p, x in _rows if p == 'L' and x >= 100)   # seeded: L below 100 and every M row (MailToDrive L100+, M100 on)
+    if len(set(_rows)) != len(_rows): bad.append('GUARD tests/LESSONS.md numbers a lesson twice: ' + ', '.join('%s%d' % r for r in sorted(set(r for r in _rows if _rows.count(r) > 1))))
     for _m in re.finditer(r'lists\s+(\d+)\s+mistake\s+classes:\s+(\d+)\s+from\s+the\s+source\s+project\s+and\s+(\d+)\s+found\s+here', open(_rd, encoding='utf-8').read() if os.path.exists(_rd) else ''):
         if (int(_m.group(1)), int(_m.group(2)), int(_m.group(3))) != (len(_rows), len(_rows) - _own, _own):
-            bad.append(f'GUARD README.md says {_m.group(1)} mistake classes ({_m.group(2)} seeded, {_m.group(3)} found here) but tests/LESSONS.md has {len(_rows)} rows ({len(_rows) - _own} below L100, {_own} from L100 on)')
+            bad.append(f'GUARD README.md says {_m.group(1)} mistake classes ({_m.group(2)} seeded, {_m.group(3)} found here) but tests/LESSONS.md has {len(_rows)} rows ({len(_rows) - _own} seeded: below L100 or M-numbered, {_own} from L100 on)')
 n_unexp = sum(1 for b in bad if b.startswith('UNEXPECTED'))
 # The review trigger's thresholds and paths are fixed; changing them is a CLAUDE.md change, not a quiet edit
 _w = json.load(open(os.path.join(D, 'tests', 'workflow_review.json')))

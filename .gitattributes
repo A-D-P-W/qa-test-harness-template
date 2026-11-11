@@ -1,2 +1,4 @@
 # Keep LF everywhere (Windows checkouts too) so clasp uploads the exact bytes the tests ran on.
 * text=auto eol=lf
+# This repository's own metadata: a project made with `git archive` (README step 1) does not inherit it.
+.mailmap export-ignore
