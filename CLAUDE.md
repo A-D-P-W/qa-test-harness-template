@@ -28,7 +28,7 @@
   (mocks hid three live-only bugs in MailToDrive, L4). Any new parser of untrusted input gets linear-time + fuzz checks (L5).
 - Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line
   at the top of the `/* CHANGELOG` block in `src/App.main.gs` (`<version>  <date or (dev)>  <change>`) and a
-  `tests/v<VERSION without dots>.test.js` (0.1.1: `tests/v011.test.js`), then `node tools/bundle.js`.
+  `tests/v<VERSION without dots>.test.js` (0.1.2: `tests/v012.test.js`), then `node tools/bundle.js`.
 - Every bug fix adds a guard for the bug's CLASS (a test or a runall GUARD), not only the case, plus a row in
   `tests/LESSONS.md` with its evidence. Lessons without evidence are not kept.
 - Rerun all suites (`./runall.sh`) after any change, and `FULL=1 ./runall.sh` before every push (L57).
@@ -85,4 +85,5 @@
   `last_review_commit` reach 8 commits or 400 added lines. When it shows, dispatch the workflow-integrity reviewer and its QA
   tester before the next release (gaps, conflicting rules, stale additions, never-run tests, docs that disagree with the
   scripts); fix or surface findings, then set `last_review_commit` to the last commit the review covered, in a commit of its own.
-- Reviews so far: <none yet>.
+- Reviews so far: <one line per review, oldest first: date, the commits it covered (`<first>..<last>`), its findings by
+  severity and the LESSONS rows that fixed them. A new project starts with no entries.>

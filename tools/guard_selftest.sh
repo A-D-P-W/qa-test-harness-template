@@ -4,7 +4,8 @@
 # fire can be broken (a regex typo, a deleted line) and every run stays green.
 # Usage: bash tools/guard_selftest.sh   Exit 0 = the clean copy passes and every expected line appears; 1 otherwise.
 # Four runs of runall in scratch git copies (deleted afterwards): clean (on a branch), from a folder whose path has a
-# space (L104), planted (on a branch), planted on main.
+# space (L104), planted (on a branch), planted on main. Then two runs of tools/template_check.sh from checkouts on main
+# (L108): with a release date it passes with no NOTICE, with a (dev) date it fails.
 # The deploy suite is not run (PWSH points nowhere): tests/deploy.test.sh tests deploy.ps1, not the GUARDs.
 # tools/selftest/Fixture/ is a module used only here, so tools/guards.js checks at least one real module.
 D=$(cd "$(dirname "$0")/.." && pwd)
@@ -23,6 +24,8 @@ copy() {   # copy <name> <branch>: tracked files + the fixture module into $W/<n
 run() { (cd "$W/$1" && env -u GITHUB_REF_NAME -u FULL PWSH="$W/no-pwsh" ./runall.sh) > "$W/$1.out" 2>&1; }
 expect() {   # expect <run> <fixed text>
   if grep -qF -- "$2" "$W/$1.out"; then echo "PASS $1 shows: $2"; pass=$((pass+1)); else echo "FAIL $1 does not show: $2"; fail=$((fail+1)); fi; }
+absent() {   # absent <run> <line start>: no output line starts with it
+  if grep -q -- "^$2" "$W/$1.out"; then echo "FAIL $1 shows a line starting: $2"; fail=$((fail+1)); else echo "PASS $1 has no line starting: $2"; pass=$((pass+1)); fi; }
 plant() {   # the violations; each line below is the trigger for one expected GUARD line
   local C="$W/$1"
   : > "$C/tests/helper.js"; mkdir -p "$C/tests/sub"; : > "$C/tests/sub/x.test.js"; : > "$C/tests/contract/bad.js"
@@ -152,6 +155,22 @@ expect main 'GUARD modules/Fixture: version 1.0.0 row changed after it reached m
 expect main 'GUARD modules/Fixture: changed since release/v0.0.1 but Version is still 1.0.0'
 expect main 'GUARD modules/Older: version 2.0.0 (on main) was removed from the version table'
 expect main 'GUARD modules/Older: Version 1.0.0 is lower than 2.0.0 at release/v0.0.1'
+
+# L108: template_check.sh carries this checkout's branch into its scratch copy, so on main a (dev) top CHANGELOG line
+# fails the template itself. Both checkouts get their date set here, so the case does not depend on the current one.
+tc() {   # tc <name> <date>: tracked files as a git repo on main, top CHANGELOG line dated <date>; runs template_check.sh
+  local C="$W/$1"; mkdir -p "$C"
+  (cd "$D" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$C" || { echo "guard_selftest: FAIL could not copy the tracked files"; exit 1; }
+  sed -i "0,/^\( \* [0-9][0-9.]*\)  *[^ ]*/s//\1  $2/" "$C/src/App.main.gs"   # the top CHANGELOG line only
+  (cd "$C" && node tools/bundle.js >/dev/null && git init -q -b main && git add -A && git -c user.email=t@t.invalid -c user.name=t commit -qm tc) >/dev/null 2>&1 \
+    || { echo "guard_selftest: FAIL could not make the template_check copy"; exit 1; }
+  (cd "$C" && env -u GITHUB_REF_NAME -u FULL PWSH="$W/no-pwsh" bash tools/template_check.sh) > "$W/$1.out" 2>&1; }
+tc tc-dated 2026-01-01
+expect tc-dated 'on branch main (placeholder script IDs; last_review_commit = its first commit)'
+expect tc-dated 'VERDICT: PASS - no regressions'
+absent tc-dated 'NOTICE'
+tc tc-dev '(dev)'
+expect tc-dev "GUARD App CHANGELOG $CUR is dated (dev) on main: replace it with the release date"
 
 echo; echo "$pass passed, $fail failed"
 [ $fail = 0 ] || { echo "guard_selftest: FAIL (outputs: rerun with the scratch folder kept to inspect)"; exit 1; }

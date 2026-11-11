@@ -6,12 +6,14 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
- * 0.1.1  (dev)       Template test gaps closed (L107): v368 fails when its AST checks did not run and drives
+ * 0.1.2  2026-11-11  tools/template_check.sh runs the scratch copy on this checkout's branch with last_review_commit set,
+ *                    so the main-only GUARDs apply to the template's own main (L108); release dates set for 0.1.0, 0.1.1.
+ * 0.1.1  2026-11-09  Template test gaps closed (L107): v368 fails when its AST checks did not run and drives
  *                    the alias and chain checks with example forms; the GUARD self-test plants every module check.
- * 0.1.0  (dev)       Project created from the template (qa-test-harness-template). Replace (dev) with today's date
- *                    before the first push to main (runall GUARD).
+ * 0.1.0  2026-11-06  Template published (qa-test-harness-template). A project made from it adds its own lines above these,
+ *                    dated (dev) during development; runall fails a (dev) top line on main (README § Start a project).
  */
 
 // One status line for the owner: what is running and whether anything needs attention. Extend it, never remove it:
