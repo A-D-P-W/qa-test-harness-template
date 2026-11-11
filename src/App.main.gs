@@ -6,8 +6,10 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.3  2026-11-11  Type-check tools bumped (Dependabot #4: typescript 7.0.2, @types/google-apps-script 2.0.14, acorn
+ *                    8.19.0); tests/typecheck/run.sh reads the versions it prints from the lockfile (L109).
  * 0.1.2  2026-11-11  tools/template_check.sh runs the scratch copy on this checkout's branch with last_review_commit set,
  *                    so the main-only GUARDs apply to the template's own main (L108); release dates set for 0.1.0, 0.1.1.
  * 0.1.1  2026-11-09  Template test gaps closed (L107): v368 fails when its AST checks did not run and drives

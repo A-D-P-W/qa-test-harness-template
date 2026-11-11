@@ -28,7 +28,7 @@
   (mocks hid three live-only bugs in MailToDrive, L4). Any new parser of untrusted input gets linear-time + fuzz checks (L5).
 - Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line
   at the top of the `/* CHANGELOG` block in `src/App.main.gs` (`<version>  <date or (dev)>  <change>`) and a
-  `tests/v<VERSION without dots>.test.js` (0.1.2: `tests/v012.test.js`), then `node tools/bundle.js`.
+  `tests/v<VERSION without dots>.test.js` (0.1.3: `tests/v013.test.js`), then `node tools/bundle.js`.
 - Every bug fix adds a guard for the bug's CLASS (a test or a runall GUARD), not only the case, plus a row in
   `tests/LESSONS.md` with its evidence. Lessons without evidence are not kept.
 - Rerun all suites (`./runall.sh`) after any change, and `FULL=1 ./runall.sh` before every push (L57).

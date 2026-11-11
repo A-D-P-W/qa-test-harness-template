@@ -62,7 +62,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 - **One verdict.** Every suite feeds one line. A failure is either listed in `tests/expected_deployed.txt` or
   `tests/known_open.txt` as `<suite> | <exact line>` with an owner's OK, or the run fails. An entry that no longer matches
   anything also fails the run, so the list of allowed failures cannot quietly rot.
-- **Lessons become guards.** `tests/LESSONS.md` lists 90 mistake classes: 81 from the source project and 9 found here. Each row gives its
+- **Lessons become guards.** `tests/LESSONS.md` lists 91 mistake classes: 81 from the source project and 10 found here. Each row gives its
   evidence (what happened, when, how it was found) and the check that now catches it. A bug fix adds a guard for the
   bug's class, not only the case. Many rows are about the tests themselves: a mock that dropped an argument, a fuzz
   generator that lost float precision, a mutant that looped forever and was counted as killed. Most of those checks are
