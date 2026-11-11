@@ -20,11 +20,13 @@ The last line of the output is the verdict: `VERDICT: PASS - no regressions`, or
 followed by each problem (exit code 1). A project created from the template runs `./runall.sh` in place of
 `tools/template_check.sh`.
 
-The template has to be run from a scratch copy. On `main`, runall fails an unfilled template on purpose. The CHANGELOG is
-still dated `(dev)` and `tests/workflow_review.json` has no first commit yet, and a real project must fix both before its
-first release. `tools/template_check.sh` copies the tracked files to a temporary git repository on a branch, puts in
-placeholder script IDs and runs runall there, the way a new project's first branch would. CI
-(`.github/workflows/tests.yml`) chooses between the two commands from the state of `tests/workflow_review.json`.
+The template has to be run from a scratch copy. An unfilled template has no first commit for the workflow-review trigger
+(`tests/workflow_review.json`), and on `main` runall fails that on purpose: a real project sets it in step 4 below.
+`tools/template_check.sh` copies the tracked files to a temporary git repository on the same branch as your checkout, puts
+in placeholder script IDs, records the copy's first commit as `last_review_commit` in a second commit, and runs runall
+there, the way a new project's repository is set up after steps 3 and 4. Every other GUARD, including the ones that apply
+only on `main`, checks the template itself (L108). Its first line says what it filled in. A clean run prints no `NOTICE`
+line. CI (`.github/workflows/tests.yml`) chooses between the two commands from the state of `tests/workflow_review.json`.
 
 ## What it checks
 
@@ -60,7 +62,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 - **One verdict.** Every suite feeds one line. A failure is either listed in `tests/expected_deployed.txt` or
   `tests/known_open.txt` as `<suite> | <exact line>` with an owner's OK, or the run fails. An entry that no longer matches
   anything also fails the run, so the list of allowed failures cannot quietly rot.
-- **Lessons become guards.** `tests/LESSONS.md` lists 89 mistake classes: 81 from the source project and 8 found here. Each row gives its
+- **Lessons become guards.** `tests/LESSONS.md` lists 90 mistake classes: 81 from the source project and 9 found here. Each row gives its
   evidence (what happened, when, how it was found) and the check that now catches it. A bug fix adds a guard for the
   bug's class, not only the case. Many rows are about the tests themselves: a mock that dropped an argument, a fuzz
   generator that lost float precision, a mutant that looped forever and was counted as killed. Most of those checks are
@@ -97,8 +99,9 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 1. Copy the tracked files into a new private repository: `git init -b main`, then
    `git -C <template> archive HEAD | tar -x`. Record the template commit in
    `docs/adr/0001-start-from-template.md`.
-2. Fill in `CLAUDE.md` and the header of `src/App.main.gs`. Replace the `(dev)` CHANGELOG date with today's date, then run
-   `node tools/bundle.js`.
+2. Fill in `CLAUDE.md` and the header of `src/App.main.gs`. The CHANGELOG lists the template's own versions; add your
+   project's lines above them (CLAUDE.md § Working rules), dated `(dev)` until the release date, which runall requires on
+   `main`. Then run `node tools/bundle.js`.
 3. Create the Apps Script project and copy its script ID from the editor's Project Settings. Put it into `deploy.ps1` (`$PinnedScriptId`) and `.clasp.json` in one
    reviewed commit.
 4. In a commit of its own, set `last_review_commit` in `tests/workflow_review.json` to the first commit's SHA and

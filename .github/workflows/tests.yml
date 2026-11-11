@@ -27,8 +27,9 @@ jobs:
           git config --global user.name ci
           node --version; pwsh --version
           set -o pipefail
-          # The unfilled template is checked in a scratch copy (tools/template_check.sh: on main it fails two GUARDs by
-          # design until README § Start a project steps 2 and 4 are done). A project made from it runs runall directly.
+          # The unfilled template is checked in a scratch copy (tools/template_check.sh: on main it fails the review-commit
+          # GUARD by design until README § Start a project step 4 is done; the copy fills that in, on this branch, L108).
+          # A project made from it runs runall directly.
           if grep -q '"SET_TO_THE_FIRST_COMMIT_AFTER_CREATING_THE_PROJECT"' tests/workflow_review.json; then
             PWSH=pwsh FULL=1 bash tools/template_check.sh 2>&1 | tee runall-output.txt
           else
