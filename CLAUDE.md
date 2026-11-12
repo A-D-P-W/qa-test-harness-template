@@ -14,7 +14,7 @@
   on every push. `tests/typecheck/` — tsc type check (pinned lockfile).
 - `deploy.ps1` — the only way code reaches the live project (§ Release). Tests: `tests/deploy.test.sh` (real git, fake clasp
   modelled on clasp 3.4.1's source; runall runs it when PowerShell is available, and `FULL=1` fails without it; CI also
-  runs it on Windows in the `deploy-windows` job, L103).
+  runs it on Windows in the `deploy-windows` job with PowerShell 7 and Windows PowerShell 5.1, L103, M116).
 - `docs/PATTERNS.md` — the safety patterns to build in (log before mutate, dry run, owner pins, preview + approve, digest + alert).
 
 ## Owner decisions
@@ -58,7 +58,8 @@
   180, M112; 0 = off, as for the type check) → one FAIL line naming the last output, and the suite is killed (CRASHED).
   A suite with a long silent step gets its own limit on its runall line.
 - Every `## Guarantees` bullet in a module CONTRACT.md starts `[G<n>]` (1, 2, … in order), and a contract test cites it as
-  `[<Module>.G<n>]` in an assertion's name (GUARD (d), M107).
+  `[<Module>.G<n>]` in a string, meant for an assertion's name (GUARD (d), M107). The guard accepts any string in the test, not
+  a comment; that the string names an assertion which tests the guarantee is for a reviewer to check.
 - `bash tools/guard_selftest.sh` (CI) makes each GUARD fire on a planted violation in a scratch copy (L101). A new GUARD
   gets a planted case and an expected line there.
 - Shell scripts quote every expansion; CI runs `shellcheck` on every tracked `*.sh` at its default severity (L104). A path

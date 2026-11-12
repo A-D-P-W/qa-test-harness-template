@@ -56,9 +56,14 @@ jobs:
 
   # L103: deploy.ps1 runs on the owner's Windows PC, so its 79 tests also run on Windows (Git Bash + PowerShell 7 +
   # a .cmd fake clasp). windows-2025 is Windows Server 2025, a fresh VM per job; it is not Windows 11 Home.
+  # M116 (seeded from MailToDrive L116): an owner who deploys with `powershell` runs Windows PowerShell 5.1, so both shells run.
   deploy-windows:
     runs-on: windows-2025
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        ps: [pwsh, powershell]
     defaults:
       run:
         shell: bash
@@ -71,13 +76,13 @@ jobs:
           git config --global user.email ci@example.invalid
           git config --global user.name ci
           git config --global core.autocrlf false
-          uname -s; node --version; pwsh --version
+          uname -s; node --version; ${{ matrix.ps }} -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
           set -o pipefail
-          PWSH=pwsh bash tests/deploy.test.sh 2>&1 | tee deploy-windows-output.txt
+          PWSH=${{ matrix.ps }} bash tests/deploy.test.sh 2>&1 | tee deploy-windows-output.txt
       - name: Report problems as annotations
         if: failure()
         run: |
-          grep -a '^FAIL' deploy-windows-output.txt | head -40 | while IFS= read -r l; do echo "::error title=deploy (Windows)::${l//%/%25}"; done || true
+          grep -a '^FAIL' deploy-windows-output.txt | head -40 | while IFS= read -r l; do echo "::error title=deploy (Windows, ${{ matrix.ps }})::${l//%/%25}"; done || true
 
   # L104: every tracked shell script passes shellcheck at its default severity. An unquoted path in runall.sh (`rm -rf $O`)
   # deleted a folder next to the repo when the repo path had a space, and that finding (SC2086) is below -S warning.

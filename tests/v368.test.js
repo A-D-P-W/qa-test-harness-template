@@ -99,6 +99,17 @@ const rowMiss = ROW_SAMPLES.filter(([call, scope]) => !NEEDS.some(([re, scopes])
 const rowless = NEEDS.filter(([re]) => !ROW_SAMPLES.some(([call]) => re.test(call)));
 ok(!rowMiss.length && !rowless.length, 'every NEEDS row matches its ' + ROW_SAMPLES.length + ' sample calls with the scope it names, and every row has a sample' +
   (rowMiss.length ? '; NO ROW FOR: ' + rowMiss.map(([c, s]) => c + ' -> ' + s).join(', ') : '') + (rowless.length ? '; NO SAMPLE FOR: ' + rowless[0][0].source : ''));
+// M115 (seeded from MailToDrive L115; its 3.12.10 review L3): and samples a row must NOT accept — a scope too weak for the call. A row widened with a wrong scope
+// (gmail.readonly on a label or send call, a read-only Drive or calendar scope on a write) fails here. A row widened on
+// purpose, with a quoted source or a live check, removes its pair in the same change.
+const ROW_NOT = [
+  ['GmailApp.sendEmail(m)', 'gmail.readonly'], ['GmailApp.getInboxThreads()', 'gmail.readonly'], ['Gmail.Users.Labels.list(u)', 'gmail.readonly'],
+  ['MailApp.sendEmail(m)', 'gmail.readonly'], ['UrlFetchApp.fetch(u)', 'script.send_mail'], ['Calendar.Calendars.insert(c)', 'calendar.readonly'],
+  ['Calendar.Acl.list(id)', 'calendar.readonly'], ['DriveApp.getRootFolder()', 'drive.readonly'], ['Drive.Files.list()', 'drive.file'],
+  ['SpreadsheetApp.openById(id)', 'spreadsheets.readonly'], ['ScriptApp.newTrigger(f)', 'script.external_request'],
+];
+const rowWide = ROW_NOT.filter(([call, scope]) => NEEDS.some(([re, scopes]) => re.test(call) && scopes.includes(full(scope))));
+ok(!rowWide.length, 'no NEEDS row accepts a scope too weak for its call (' + ROW_NOT.length + ' pairs)' + (rowWide.length ? '; ACCEPTED: ' + rowWide.map(([c, sc]) => c + ' with ' + sc).join(', ') : ''));
 // 3.9.7 workflow review H1: the regex rows see only `Service.` text, so an alias (`const { Events } = Calendar`, `const A = DriveApp`)
 // would hide a call. Every service name in reachable code must be the object of a plain member access (or a typeof operand).
 // L107: the AST checks below must report that they ran. A parser that failed to load, or a guard around them that
