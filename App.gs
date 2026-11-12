@@ -9,8 +9,11 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.6';
+const VERSION = '0.1.7';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.7  2026-11-12  Synced from MailToDrive 3.12.10's review fixes: v368 also checks calls with a scope too weak for them
+ *                    (M115); deploy-windows runs under PowerShell 7 and Windows PowerShell 5.1 (M116); the GUARD (d) docs say
+ *                    the guard accepts any string, normally an assertion's name.
  * 0.1.6  2026-11-12  Synced from MailToDrive 3.12.8: runall's hang watchdog tools/watchdog.js (M106, M112); module
  *                    GUARD (d), each contract guarantee [G<n>] cited by a contract test (M107); the FULL clock reruns must
  *                    give every suite the same counts (M109); a bare Date() under tools/clockahead.js (M110). Found
