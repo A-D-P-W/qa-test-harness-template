@@ -28,7 +28,7 @@
   (mocks hid three live-only bugs in MailToDrive, L4). Any new parser of untrusted input gets linear-time + fuzz checks (L5).
 - Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line
   at the top of the `/* CHANGELOG` block in `src/App.main.gs` (`<version>  <date or (dev)>  <change>`) and a
-  `tests/v<VERSION without dots>.test.js` (0.1.5: `tests/v015.test.js`), then `node tools/bundle.js`.
+  `tests/v<VERSION without dots>.test.js` (0.1.6: `tests/v016.test.js`), then `node tools/bundle.js`.
 - Every bug fix adds a guard for the bug's CLASS (a test or a runall GUARD), not only the case, plus a row in
   `tests/LESSONS.md` with its evidence. Lessons without evidence are not kept.
 - Rerun all suites (`./runall.sh`) after any change, and `FULL=1 ./runall.sh` before every push (L57).
@@ -45,7 +45,9 @@
   (tests/LESSONS.md): a suite that passes nothing, a `tests/v*.test.js` not run, no test file for the current VERSION,
   clock-offset time bombs and unclamped relative clock offsets, two suites with identical results, stale allowance entries,
   exact-VERSION assertions, a suite exiting >1 (crash), a test-looking file runall never runs, a stale bundle, a VERSION
-  without its CHANGELOG line, a `(dev)` CHANGELOG date on main, and the module GUARDs in `tools/guards.js`.
+  without its CHANGELOG line, a `(dev)` CHANGELOG date on main, a CHANGELOG version listed twice (M105), and the module GUARDs
+  in `tools/guards.js`. `tools/guards.js` and `tests/v368.test.js` require the pinned acorn (M108); runall exits 2 when
+  `MTD_CLOCK_AHEAD_DAYS` is set outside its own clock reruns (M106).
 - Allowed failures: `tests/expected_deployed.txt` (deployed design differences) and `tests/known_open.txt` (open bugs and RISK
   lines, each with a fix version or owner decision). Entry format `<suite> | <exact line>`; an entry that matches nothing fails
   the run. Adding a line to either needs the owner's OK.

@@ -26,6 +26,10 @@ if (process.argv[2] === '--sha') { console.log(modSha(process.argv[3])); process
 let acorn;
 try { acorn = require(process.env.MTD_ACORN || path.join(process.env.MTD_TC_CACHE || path.join(require('os').homedir(), '.cache', 'mtd-tc'), 'node_modules', 'acorn')); }
 catch (e) { console.log('SKIP guards: acorn not installed (tests/typecheck/run.sh installs it)'); process.exit(3); }
+// M108: the parser must be the pinned one. A tool cache another project's lockfile filled (same default path:
+// ~/.cache/mtd-tc) let these checks run on a parser no review covers in the source project.
+{ const pj = path.join(D, 'tests', 'typecheck', 'package.json'), pin = fs.existsSync(pj) ? (JSON.parse(fs.readFileSync(pj, 'utf8')).devDependencies || {}).acorn : null;
+  if (pin && acorn.version !== pin) { console.log(`GUARD tools/guards.js loaded acorn ${acorn.version}, but tests/typecheck/package.json pins ${pin}: run tests/typecheck/run.sh (a tool cache shared with another project? M108)`); process.exit(1); } }
 const MODS = fs.existsSync(path.join(D, 'modules')) ? fs.readdirSync(path.join(D, 'modules')).filter(m => fs.existsSync(path.join(D, 'modules', m, m + '.gs'))).sort() : [];
 // consumer → its own files, from deploy/*.files (3.9.2, Phase 2 §10: every project list is a consumer)
 let PLIST_ERR = null; const PLIST = (() => { try { return require(path.join(D, 'tools', 'projects.js')).projects(D); } catch (e) { PLIST_ERR = e.message; return []; } })();

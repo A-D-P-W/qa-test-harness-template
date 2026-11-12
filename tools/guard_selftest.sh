@@ -41,6 +41,7 @@ plant() {   # the violations; each line below is the trigger for one expected GU
   local dup; dup=$(grep '^| L100 |' "$C/tests/LESSONS.md"); printf '%s\n' "$dup" >> "$C/tests/LESSONS.md"   # L106: a lesson numbered twice
   dup=$(grep '^| M100 |' "$C/tests/LESSONS.md"); printf '%s\n' "$dup" >> "$C/tests/LESSONS.md"   # the same for a seeded M row
   sed -i "s/^const VERSION = '[^']*';/const VERSION = '9.9.9';/" "$C/src/App.main.gs"
+  sed -i '/^ \* 0\.1\.0  /{p}' "$C/src/App.main.gs"   # M105: a CHANGELOG version listed twice
   printf 'function useFixture_() { return fixtureClamp_(1); }\nfunction useBad_() { return badPub_(); }\n' >> "$C/src/App.main.gs"
   printf 'function fixtureLeak_() { return globalThis; }\nfunction fixtureUsesBad_() { return badPub_(); }\n' >> "$C/modules/Fixture/Fixture.gs"
   # L107: module-rule violations, one or more per check in tools/guards.js (tools/selftest/planted/)
@@ -87,6 +88,7 @@ expect planted 'GUARD README.md says 1'
 expect planted 'GUARD tests/LESSONS.md numbers a lesson twice: L100, M100'
 expect planted 'GUARD STALE App.gs differs from a fresh build'
 expect planted 'GUARD App VERSION 9.9.9 has no tests/v999.test.js'
+expect planted 'GUARD src/App.main.gs CHANGELOG lists 0.1.0 after 0.1.0: every version once, newest first'
 expect planted "GUARD App VERSION 9.9.9 != top CHANGELOG line $CUR"
 expect planted 'GUARD modules/Fixture: source or contract changed without a new version row'
 expect planted 'GUARD modules/Fixture/Fixture.gs:6 uses globalThis'
