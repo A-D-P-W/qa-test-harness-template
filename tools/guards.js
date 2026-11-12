@@ -11,6 +11,9 @@
 //       no top-level name declared twice in a project.
 //   (c) each non-planned consumer has tests/contract/<Module>.<consumer>.test.js that names every Public export the
 //       consumer's code uses and calls no Internal helper; ARCHITECTURE.md lists the same consumers.
+//   (d) every "## Guarantees" bullet of a CONTRACT.md starts with an ID [G1], [G2], … in order, and each ID is cited as
+//       "[<Module>.G<n>]" in a string of a tests/contract/<Module>.*.test.js (a comment does not count); citing an ID the
+//       contract does not have fails too (M107).
 // Usage: node tools/guards.js [--sha <Module>]   (MTD_ACORN = path of acorn, else the typecheck tool cache)
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), cp = require('child_process');
@@ -206,6 +209,23 @@ for (const m of MODS) { const c = C[m]; if (!c) continue;
     for (const n of c.internal) if (mentioned.has(n)) bad(`${tf}: references Internal helper ${n}`);
     const row = new RegExp('^\\| ' + m + ' \\|[^\\n]*' + cons, 'm'); if (arch && !row.test(arch)) bad(`docs/ARCHITECTURE.md: registry row for ${m} does not list consumer ${cons}`);
   } }
+// ---- (d) M107 (seeded from MailToDrive L107, its ADR-0017): every Guarantees bullet carries an ID [G<n>] (1, 2, … in
+// order), and at least one of the module's contract tests cites it as "[<Module>.G<n>]" in a string (an assertion's name),
+// not in a comment (the AST sees no comments). In MailToDrive a module's behavior was removed with a patch bump and every
+// test stayed green: GUARD (a) checks that the version changed, not that each promise is still tested.
+for (const m of MODS) { const c = C[m]; if (!c) continue;
+  const g = section(c.t, 'Guarantees'), bullets = g.split('\n').filter(l => /^- /.test(l));
+  const ids = bullets.map(l => (/^- \[G(\d+)\] /.exec(l) || [])[1]);
+  ids.forEach((id, i) => { if (id === undefined) bad(`modules/${m}/CONTRACT.md: Guarantees bullet ${i + 1} has no "[G<n>]" ID: ${bullets[i].slice(0, 60)}`);
+    else if (Number(id) !== i + 1) bad(`modules/${m}/CONTRACT.md: Guarantees bullet ${i + 1} is [G${id}] (IDs go 1, 2, … in order)`); });
+  const cited = new Set(), files = fs.existsSync(path.join(D, 'tests/contract')) ? fs.readdirSync(path.join(D, 'tests/contract')).filter(f => f.startsWith(m + '.') && f.endsWith('.test.js')) : [];
+  for (const f of files) { let ast; try { ast = parse(`tests/contract/${f}`); } catch (e) { bad(`tests/contract/${f} does not parse: ${e.message}`); continue; }
+    (function scan(n) { if (!n || typeof n !== 'object') return;
+      const str = n.type === 'Literal' && typeof n.value === 'string' ? n.value : n.type === 'TemplateElement' ? (n.value.cooked || '') : '';
+      for (const x of str.matchAll(new RegExp('\\[' + m + '\\.G(\\d+)\\]', 'g'))) cited.add(Number(x[1]));
+      for (const k of Object.keys(n)) { if (k === 'loc') continue; const v = n[k]; if (Array.isArray(v)) v.forEach(scan); else if (v && typeof v.type === 'string') scan(v); } })(ast); }
+  ids.forEach((id, i) => { if (id !== undefined && !cited.has(Number(id))) bad(`modules/${m}: guarantee [G${id}] is cited by no contract test (a string "[${m}.G${id}]" in tests/contract/${m}.*.test.js)`); });
+  for (const x of cited) if (!ids.includes(String(x))) bad(`tests/contract/${m}.*: cites [${m}.G${x}], which modules/${m}/CONTRACT.md does not have`); }
 out.forEach(l => console.log(l));
 console.log(out.length ? `${out.length} module guard problem(s)` : `OK module guards: ${MODS.length} modules`);
 process.exit(out.length ? 1 : 0);

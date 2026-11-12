@@ -4,7 +4,10 @@ A module is `modules/<Name>/<Name>.gs` + `modules/<Name>/CONTRACT.md`. It declar
 consumer globals, and calls only the services its contract lists (tools/guards.js GUARD (b), AST-checked). Every consumer
 has a contract test `tests/contract/<Module>.<consumer>.test.js` that calls or member-accesses every export it uses and
 never an Internal helper (GUARD (c)). A change to a module's code or contract API sections needs a new version row with
-its sha256 (`node tools/guards.js --sha <Module>`) and an ADR (GUARD (a)).
+its sha256 (`node tools/guards.js --sha <Module>`) and an ADR (GUARD (a)). Every bullet of a contract's `## Guarantees`
+starts with an ID `[G1]`, `[G2]`, … in order, and at least one contract test of the module cites each ID as
+`[<Module>.G<n>]` in a string, normally the assertion's name (GUARD (d), M107): a comment does not count, and citing an ID
+the contract does not have fails.
 
 ## Vendoring a MailToDrive module (share by source, MailToDrive ADR-0003)
 1. Copy `modules/<Name>/` from MailToDrive at a release tag (and its Depends-on modules); note the tag in a new ADR of this
@@ -15,7 +18,8 @@ its sha256 (`node tools/guards.js --sha <Module>`) and an ADR (GUARD (a)).
 4. Add `<Name>` to `deploy/modules.order` (after its Depends-on modules) and to `deploy/app.files` before `src/App.main.gs`.
 5. Copy MailToDrive's `tests/contract/load.js` and `_h.js` into `tests/contract/` (first module only; remove `.gitkeep`
    from the template's file list if you track it).
-6. Write `tests/contract/<Name>.app.test.js` for the exports App uses; mutate the module once and see it fail (L37).
+6. Write `tests/contract/<Name>.app.test.js` for the exports App uses, with every guarantee cited as `[<Name>.G<n>]` in
+   the name of an assertion that tests it (GUARD (d)); mutate the module once and see it fail (L37).
 7. Add the module's services to `tests/v368.test.js` NEEDS if missing, and a row to ARCHITECTURE.md's registry naming the
    consumer `App`.
 8. `node tools/bundle.js`; `node tools/guards.js` (expect `OK module guards: 1 modules`); `./runall.sh`.

@@ -4,8 +4,8 @@
 # fire can be broken (a regex typo, a deleted line) and every run stays green.
 # Usage: bash tools/guard_selftest.sh   Exit 0 = the clean copy passes and every expected line appears; 1 otherwise.
 # Five runs of runall in scratch git copies (deleted afterwards): clean (on a branch), from a folder whose path has a
-# space (L104), planted (on a branch), planted on main, and one FULL run with tests that age out at 30 and 200 days
-# (M100, M101). Then two runs of tools/template_check.sh from checkouts on main (L108): with a release date it passes
+# space (L104), planted (on a branch, with a hung suite and a 20 s watchdog, M106), planted on main, and one FULL run with
+# tests that age out at 30 and 200 days (M100, M101) and one whose count changes 60 days out (M109). Then two runs of tools/template_check.sh from checkouts on main (L108): with a release date it passes
 # with no NOTICE, with a (dev) date it fails.
 # The deploy suite is not run (PWSH points nowhere): tests/deploy.test.sh tests deploy.ps1, not the GUARDs.
 # tools/selftest/Fixture/ is a module used only here, so tools/guards.js checks at least one real module.
@@ -18,6 +18,7 @@ copy() {   # copy <name> <branch>: tracked files + the fixture module into $W/<n
   local C="$W/$1"; mkdir -p "$C"
   (cd "$D" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$C" || { echo "guard_selftest: FAIL could not copy the tracked files"; exit 1; }
   mkdir -p "$C/modules/Fixture"; cp "$D/tools/selftest/Fixture/Fixture.gs" "$D/tools/selftest/Fixture/CONTRACT.md" "$C/modules/Fixture/"
+  cp "$D/tools/selftest/Fixture/Fixture.app.test.js" "$C/tests/contract/"   # cites [Fixture.G1], [Fixture.G2] (GUARD (d), M107)
   cp "$D/tools/selftest/Fixture/0900-guard-selftest-fixture.md" "$C/docs/adr/"; echo Fixture >> "$C/deploy/modules.order"
   (cd "$C" && git init -q -b "$2" && git add -A && git -c user.email=t@t.invalid -c user.name=t commit -qm selftest) >/dev/null 2>&1 \
     || { echo "guard_selftest: FAIL could not make the scratch git copy"; exit 1; }
@@ -34,6 +35,7 @@ plant() {   # the violations; each line below is the trigger for one expected GU
       '// Date.now() - 2 * 3600e3' "// ok(VER === '0.1.0')"; } > "$C/tests/v369.test.js"
   echo 'process.exit(2);' > "$C/tests/v901.test.js"; echo 'process.exit(1);' > "$C/tests/v902.test.js"
   echo 'console.log("FAIL planted"); process.exit(1);' > "$C/tests/v903.test.js"
+  echo 'console.log("PASS before the hang"); for (;;) {}' > "$C/tests/v905.test.js"   # M106: killed by the watchdog (run planted sets 20 s)
   printf '%s\n' 'console.log("PASS ok"); console.log("FAIL planted cr\rsecond part"); process.exit(1);' > "$C/tests/v904.test.js"   # L102
   printf 'v010 | FAIL nothing prints this line\nno separator here\n' >> "$C/tests/known_open.txt"
   sed -i 's/"threshold_commits": 8/"threshold_commits": 9/' "$C/tests/workflow_review.json"
@@ -45,9 +47,14 @@ plant() {   # the violations; each line below is the trigger for one expected GU
   printf 'function fixtureLeak_() { return globalThis; }\nfunction fixtureUsesBad_() { return badPub_(); }\n' >> "$C/modules/Fixture/Fixture.gs"
   # L107: module-rule violations, one or more per check in tools/guards.js (tools/selftest/planted/)
   local P="$D/tools/selftest/planted" m
-  for m in Bad Spare NoVer NoCon Broken; do mkdir -p "$C/modules/$m"; cp "$P/$m.gs" "$C/modules/$m/$m.gs"; echo "$m" >> "$C/deploy/modules.order"
+  for m in Bad Spare NoVer NoCon Broken Promised; do mkdir -p "$C/modules/$m"; cp "$P/$m.gs" "$C/modules/$m/$m.gs"; echo "$m" >> "$C/deploy/modules.order"
     [ -f "$P/$m.CONTRACT.md" ] && cp "$P/$m.CONTRACT.md" "$C/modules/$m/CONTRACT.md"; done
   cp "$P/Bad.app.test.js" "$C/tests/contract/Bad.app.test.js"
+  # M107 GUARD (d): Promised has a bullet with no ID, IDs out of order, a guarantee cited only in a comment and a citation of
+  # an ID it lacks; its version row gets the real sha, so only GUARD (d) reports it
+  cp "$P/Promised.app.test.js" "$C/tests/contract/Promised.app.test.js"; printf -- '- Promised 1.0.0\n' >> "$C/docs/adr/0900-guard-selftest-fixture.md"
+  local psha; psha=$(cd "$C" && node tools/guards.js --sha Promised); sed -i "s/| SHA |/| $psha |/" "$C/modules/Promised/CONTRACT.md"
+  rm -f "$C/tests/contract/Fixture.app.test.js"   # keeps the GUARD (c) case below: App uses Fixture with no contract test
   sed -i 's#^src/App.main.gs$#modules/Spare/Spare.gs\nsrc/App.main.gs#' "$C/deploy/app.files"
   (cd "$C" && node tools/bundle.js >/dev/null) && echo '// hand edit' >> "$C/App.gs"
 }
@@ -65,7 +72,7 @@ expect "code old/repo" 'VERDICT: PASS - no regressions'
 if [ -f "$W/code/CANARY.txt" ]; then echo "PASS a path with a space: the sibling folder's canary survived"; pass=$((pass+1))
 else echo "FAIL a path with a space: runall deleted the sibling folder $W/code (L104)"; fail=$((fail+1)); fi
 
-copy planted selftest; plant planted; run planted
+copy planted selftest; plant planted; MTD_WATCHDOG_S=20 run planted
 expect planted 'GUARD tests/helper.js looks like a test but runall never runs it'
 expect planted 'GUARD tests/sub/x.test.js looks like a test in a subfolder that runall never runs'
 expect planted 'GUARD tests/contract/bad.js is not <Module>.<consumer>.test.js'
@@ -134,6 +141,16 @@ expect planted 'GUARD deploy/app.files: bundles Spare, which App does not use'
 expect planted 'GUARD tests/contract/Bad.app.test.js: App uses Bad.badPub_ but its contract test never exercises it'
 expect planted 'GUARD tests/contract/Bad.app.test.js: references Internal helper badHelper_'
 expect planted 'GUARD docs/ARCHITECTURE.md: registry row for Bad does not list consumer App'
+# GUARD (d), M107
+expect planted 'GUARD modules/Promised/CONTRACT.md: Guarantees bullet 2 has no "[G<n>]" ID'
+expect planted 'GUARD modules/Promised/CONTRACT.md: Guarantees bullet 3 is [G4] (IDs go 1, 2, … in order)'
+expect planted 'GUARD modules/Promised: guarantee [G1] is cited by no contract test'
+expect planted 'GUARD tests/contract/Promised.*: cites [Promised.G9], which modules/Promised/CONTRACT.md does not have'
+absent planted 'GUARD modules/Promised: guarantee \[G4\]'
+absent planted 'GUARD modules/Promised: source or contract changed'
+# M106: the hang watchdog kills a stuck suite and names its last output
+expect planted 'UNEXPECTED [v905] FAIL watchdog: no output for 20 s (a hang, M106) after: PASS before the hang'
+expect planted 'UNEXPECTED [v905] FAIL suite crashed: exit 137'
 
 copy main main
 # L107: rules that need history. Older is committed on main at 2.0.0 and tagged; the Fixture row and source change after
@@ -164,11 +181,17 @@ lim=$(node -e 'console.log(Date.now() + 30 * 864e5)')
 printf '%s\n' "if (Date.now() > $lim) { console.log('FAIL fixture aged out'); process.exit(1); }" "console.log('PASS fixture'); console.log('\n1 passed, 0 failed');" > "$W/aging/tests/v903.test.js"
 lim=$(node -e 'console.log(Date.now() + 200 * 864e5)')   # M101: ages out between the two horizons
 printf '%s\n' "if (Date.now() > $lim) { console.log('FAIL fixture aged out at 200 days'); process.exit(1); }" "console.log('PASS fixture'); console.log('\n1 passed, 0 failed');" > "$W/aging/tests/v904.test.js"
+lim=$(node -e 'console.log(Date.now() + 60 * 864e5)')   # M109: a check that adds itself once the date passes 60 days out
+printf '%s\n' "console.log('PASS always');" "if (Date.now() > $lim) console.log('PASS only later');" "console.log('\n1 passed, 0 failed');" > "$W/aging/tests/v905.test.js"
 (cd "$W/aging" && git add -A && git -c user.email=t@t.invalid -c user.name=t commit -qm aging) >/dev/null 2>&1 || { echo "guard_selftest: FAIL could not commit the aging copy"; exit 1; }
 (cd "$W/aging" && env -u GITHUB_REF_NAME FULL=1 PWSH="$W/no-pwsh" ./runall.sh) > "$W/aging.out" 2>&1
 expect aging '== v903: PASS=1 FAIL=0'
 expect aging 'FAIL clock +90 days: UNEXPECTED [v903] FAIL fixture aged out'
 expect aging 'FAIL clock +365 days: UNEXPECTED [v904] FAIL fixture aged out at 200 days'
+expect aging 'GUARD suite v905 gives other counts with the clock 90 days ahead (PASS/FAIL/RISK (1, 0, 0) -> (2, 0, 0)): an assertion depends on the date (M109)'
+expect aging 'GUARD suite v905 gives other counts with the clock 365 days ahead (PASS/FAIL/RISK (1, 0, 0) -> (2, 0, 0))'
+expect aging 'GUARD suite v903 gives other counts with the clock 90 days ahead (PASS/FAIL/RISK (1, 0, 0) -> (0, 1, 0))'
+absent aging 'GUARD suite v010 gives other counts'
 if grep -qF 'FAIL clock +90 days: UNEXPECTED [v904]' "$W/aging.out"; then echo "FAIL aging: the 200-day fixture failed at +90 days"; fail=$((fail+1)); else echo "PASS aging: the 200-day fixture passes at +90 days (only the 365-day rerun sees it)"; pass=$((pass+1)); fi
 
 # L108: template_check.sh carries this checkout's branch into its scratch copy, so on main a (dev) top CHANGELOG line

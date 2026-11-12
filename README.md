@@ -34,10 +34,11 @@ line. CI (`.github/workflows/tests.yml`) chooses between the two commands from t
 |---|---|
 | `typecheck` | Calls to Apps Script members that do not exist, checked against Google's published types (`tests/typecheck/`, typescript and @types/google-apps-script pinned by integrity hash). Mocks cannot catch this. |
 | `v368` (scope map) | Code that calls an Apps Script service whose OAuth scope is missing from `appsscript.json`. The check walks the AST of the code the project can reach, so aliasing (`const A = DriveApp`) and optional chaining are covered, and the alias and chain checks are driven with example forms on every run. Without its parser the suite fails in every mode (L107). Any service with no row in its NEEDS table fails, and every run checks each row against a sample call (L105), because the template's own code calls no service. Code that reaches a service without naming it (the global object, `Reflect`, `eval`/`Function`, `this[...]`, `.constructor`, property-descriptor lookups) fails too, and every run re-checks that rule against every known bypass form and a set of legitimate forms, and prints both counts (L100). Four review rounds each found new bypasses, and a name produced by running code (for example `['constr', 'uctor'].join('')`) is a documented residual. It is a lint against accidental omissions, not a sandbox: the manifest is what Google enforces at run time. |
-| `v010` | The example project's own tests. Each version adds a `tests/v<VERSION without dots>.test.js` (0.1.5: `tests/v015.test.js`). |
+| `v010` | The example project's own tests. Each version adds a `tests/v<VERSION without dots>.test.js` (0.1.6: `tests/v016.test.js`). |
 | `deploy` | `deploy.ps1`, the only release path, tested against real git repositories and a fake `clasp` CLI. The fake is modelled on the source of clasp 3.4.1. Each test asserts which stage stopped the release, not only that it stopped. |
-| `guards` (`tools/guards.js`) | Module rules, checked on the AST: a module reads no consumer globals and calls only the services its contract lists; every consumer has a contract test; module versions are immutable once released. |
-| `clock90`, `clock365` (FULL only) | A test fixture with a fixed date that passes today and fails once the date ages out of a lookback window. FULL reruns every suite twice with every clock a suite can read (`Date.now()`, `new Date()`, vm sandboxes) moved ahead by `tools/clockahead.js`: 90 days, then 365 days, so a fixture fails up to a year early (M100, M101, seeded from the source project). |
+| `guards` (`tools/guards.js`) | Module rules, checked on the AST: a module reads no consumer globals and calls only the services its contract lists; every consumer has a contract test; module versions are immutable once released; every guarantee in a contract carries an ID `[G<n>]` that a contract test cites as `[<Module>.G<n>]` in an assertion's name, not in a comment (GUARD (d), M107). |
+| `clock90`, `clock365` (FULL only) | A test fixture with a fixed date that passes today and fails once the date ages out of a lookback window. FULL reruns every suite twice with every clock a suite can read (`Date.now()`, `new Date()`, a bare `Date()`, vm sandboxes) moved ahead by `tools/clockahead.js`: 90 days, then 365 days, so a fixture fails up to a year early (M100, M101, M110, seeded from the source project). Each rerun must also give every suite the same PASS/FAIL/RISK counts as the run itself, so a check that adds itself on some days fails too (M109). |
+| watchdog (`tools/watchdog.js`) | A suite that hangs (a super-linear regex on a crafted input never returns, so no timer inside the suite fires). runall preloads the watchdog into every node suite; a suite silent for `MTD_WATCHDOG_S` seconds (default 180) gets one FAIL line naming its last output and is killed, so the run reports it as CRASHED instead of hanging (M106, M112). |
 | runall GUARDs | Checks on the test suite itself, listed below. |
 
 The runall GUARDs fail the run when:
@@ -52,6 +53,7 @@ The runall GUARDs fail the run when:
 - VERSION and the top CHANGELOG line disagree
 - the thresholds of the workflow-review trigger were edited quietly
 - the README's count of lessons differs from the rows in `tests/LESSONS.md`, or a lesson number appears twice
+- under FULL, a suite gives other PASS/FAIL/RISK counts in a clock rerun, or does not run there (M109)
 
 `tools/guard_selftest.sh` (run by CI) plants a violation for each of these in a scratch copy, plus module-rule violations
 in fixture modules (`tools/selftest/Fixture/`, `tools/selftest/planted/`), one per module rule including the ones that
@@ -63,7 +65,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 - **One verdict.** Every suite feeds one line. A failure is either listed in `tests/expected_deployed.txt` or
   `tests/known_open.txt` as `<suite> | <exact line>` with an owner's OK, or the run fails. An entry that no longer matches
   anything also fails the run, so the list of allowed failures cannot quietly rot.
-- **Lessons become guards.** `tests/LESSONS.md` lists 101 mistake classes: 91 from the source project and 10 found here. Each row gives its
+- **Lessons become guards.** `tests/LESSONS.md` lists 107 mistake classes: 96 from the source project and 11 found here. Each row gives its
   evidence (what happened, when, how it was found) and the check that now catches it. A bug fix adds a guard for the
   bug's class, not only the case. Many rows are about the tests themselves: a mock that dropped an argument, a fuzz
   generator that lost float precision, a mutant that looped forever and was counted as killed. Most of those checks are
@@ -88,7 +90,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 | Area | Files |
 |---|---|
 | Example project | `src/App.main.gs`, `App.gs` (generated bundle, committed), `appsscript.json`, `deploy/app.files`, `tests/v010.test.js` |
-| Verdict | `runall.sh`, `tests/expected_deployed.txt`, `tests/known_open.txt`, `tests/LESSONS.md`, `tools/template_check.sh`, `tools/guard_selftest.sh` |
+| Verdict | `runall.sh`, `tools/watchdog.js`, `tests/expected_deployed.txt`, `tests/known_open.txt`, `tests/LESSONS.md`, `tools/template_check.sh`, `tools/guard_selftest.sh` |
 | Scope map and types | `tests/v368.test.js`, `tools/reachable.js`, `tools/ast.js`, `tests/typecheck/` |
 | Modules | `tools/bundle.js`, `tools/projects.js`, `tools/guards.js`, `docs/MODULES.md`, `docs/ARCHITECTURE.md` |
 | Release | `deploy.ps1`, `tests/deploy.test.sh`, `tests/deploy/fake-clasp.js`, `.clasp.json`, `.claspignore` |

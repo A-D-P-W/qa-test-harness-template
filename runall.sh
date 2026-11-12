@@ -6,11 +6,20 @@
 # Each entry is "<suite> | <exact failure line>"; an entry that matches nothing fails the run (stale).
 # Guards (tests/LESSONS.md): every suite runs and passes something, every tests/v*.test.js runs, the current VERSION has
 # a test file, no clock-offset time bombs, no two suites with identical results, RISK lines count like failures,
-# no stale allowance entries, no exact-VERSION asserts, a suite exiting >1 is a crash, no test-looking file left unrun.
+# no stale allowance entries, no exact-VERSION asserts, a suite exiting >1 is a crash, no test-looking file left unrun,
+# a suite silent for MTD_WATCHDOG_S seconds is killed (M106), and under FULL the clock reruns give every suite the same counts (M109).
 # Writes out/ (untracked; safe to delete).
 D=$(cd "$(dirname "$0")" && pwd); O=${MTD_OUT:-$D/out}
 case "$O" in "$D/out"|"$D/out/"*) ;; *) echo "runall: MTD_OUT must be inside $D/out (got '$O')"; exit 2 ;; esac   # M100: nested clock-ahead run
 export TZ=${TZ:-America/Los_Angeles}
+# M106/M112 (seeded from MailToDrive L106/L112): every node suite runs under the hang watchdog (tools/watchdog.js): a suite
+# silent for MTD_WATCHDOG_S seconds prints a FAIL line naming its last output and is killed (CRASHED), instead of hanging
+# the run with no FAIL line. 180 s, not a limit set from local timings: a slower CI runner must not kill a healthy suite
+# (M112). A suite with a long silent step gets its own limit on its line. The type check (npm ci, tsc) runs without it.
+# Every path in NODE_OPTIONS is double-quoted: node splits NODE_OPTIONS at spaces, so an unquoted $D with a space in it
+# loads a module that does not exist and every node suite crashes (L110).
+export MTD_WATCHDOG_S=${MTD_WATCHDOG_S:-180}
+case "${NODE_OPTIONS:-}" in *tools/watchdog.js*) ;; *) export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require \"$D/tools/watchdog.js\"" ;; esac
 rm -rf -- "${O:?}"; mkdir -p "$O"; : > "$O/_fails.txt"; : > "$O/_suites.txt"
 sum(){ local rc=${3:-$?}; echo "$1" >> "$O/_suites.txt"; echo "== $1: PASS=$(grep -cE '^ *PASS' "$2") FAIL=$(grep -cE '^ *(FAIL|BUG|LEAK) ' "$2") RISK=$(grep -c '^ *RISK' "$2")$([ "$rc" -gt 1 ] && echo '  CRASHED')"
        grep -E '^ *(FAIL|BUG|LEAK|RISK) ' "$2" | sed "s/^ */[$1] /" >> "$O/_fails.txt"
@@ -27,7 +36,7 @@ F=$D/$B; export MTD_GS=$F
 echo "-- suites ($B)"
 # Type check against @types/google-apps-script (pinned; tools cached; exit 3 = unavailable). Runs BEFORE the v* suites:
 # it installs acorn, which the scope map and module GUARDs need (CI starts with no cache).
-MTD_GS="$F" bash "$D/tests/typecheck/run.sh" > "$O/typecheck.txt" 2>&1; tcrc=$?
+MTD_WATCHDOG_S=0 MTD_GS="$F" bash "$D/tests/typecheck/run.sh" > "$O/typecheck.txt" 2>&1; tcrc=$?
 if [ "$tcrc" = 3 ]; then echo "== typecheck: SKIPPED ($(head -1 "$O/typecheck.txt"))"; [ -n "$FULL" ] && echo "[typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> "$O/_fails.txt"
 else sum typecheck "$O/typecheck.txt" "$tcrc"; fi
 for t in "$D"/tests/v[0-9]*.test.js; do [ -e "$t" ] || continue; n=$(basename "$t" .test.js); SRC="$F" node "$t" > "$O/$n.txt" 2>&1; sum "$n" "$O/$n.txt"; done
@@ -46,14 +55,14 @@ while read -r PN PDIR POUT _; do
   echo "-- project $PN ($POUT)"
   for t in "$D/$PDIR"/tests/*.test.js; do [ -e "$t" ] || continue; n=$PDIR.$(basename "$t" .test.js); SRC="$D/$POUT" MTD_GS="$D/$POUT" node "$t" > "$O/$n.txt" 2>&1; sum "$n" "$O/$n.txt"; done
   SRC="$D/$POUT" node "$D/tests/v368.test.js" > "$O/$PDIR.v368.txt" 2>&1; sum "$PDIR.v368" "$O/$PDIR.v368.txt"
-  MTD_GS="$D/$POUT" bash "$D/tests/typecheck/run.sh" > "$O/$PDIR.typecheck.txt" 2>&1; tcrc=$?
+  MTD_WATCHDOG_S=0 MTD_GS="$D/$POUT" bash "$D/tests/typecheck/run.sh" > "$O/$PDIR.typecheck.txt" 2>&1; tcrc=$?
   if [ "$tcrc" = 3 ]; then echo "== $PDIR.typecheck: SKIPPED"; [ -n "$FULL" ] && echo "[$PDIR.typecheck] FAIL suite not run: FULL=1 (release) needs the type check" >> "$O/_fails.txt"
   else sum "$PDIR.typecheck" "$O/$PDIR.typecheck.txt" "$tcrc"; fi
 done < "$O/_projects.txt"
 # M100 (seeded from MailToDrive L100): FULL reruns every suite with all clocks 90 days ahead (tools/clockahead.js), so a fixture with a
 # fixed date that ages out of a lookback window fails here 90 days before it would fail for real.
 if [ -n "$FULL" ] && [ -z "${MTD_CLOCK_AHEAD_DAYS:-}" ]; then
-  (env -u PWSH -u FULL MTD_OUT="$O/clock90" MTD_CLOCK_AHEAD_DAYS=90 NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $D/tools/clockahead.js" "$D/runall.sh") > "$O/_clock90_run.txt" 2>&1
+  (env -u PWSH -u FULL MTD_OUT="$O/clock90" MTD_CLOCK_AHEAD_DAYS=90 NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require \"$D/tools/clockahead.js\"" "$D/runall.sh") > "$O/_clock90_run.txt" 2>&1
   { grep -q '^VERDICT: PASS' "$O/_clock90_run.txt" && echo "PASS every suite passes with the clock 90 days ahead ($(grep -c '^== ' "$O/_clock90_run.txt") suites)"
     grep -E '^(UNEXPECTED|GUARD|STALE ENTRY|BAD ENTRY)|CRASHED' "$O/_clock90_run.txt" | sed 's/^/FAIL clock +90 days: /'
     grep -q '^VERDICT:' "$O/_clock90_run.txt" || echo "FAIL clock +90 days: runall printed no VERDICT"; } > "$O/clock90.txt"
@@ -61,7 +70,7 @@ if [ -n "$FULL" ] && [ -z "${MTD_CLOCK_AHEAD_DAYS:-}" ]; then
   # M101 (seeded from MailToDrive L101): and 365 days ahead. +90 alone missed fixtures that pass at +202 days and fail at +203
   # in the source project; the year horizon flags them a year early. Both stay: a year-boundary or DST failure can show at
   # one shift and not the other.
-  (env -u PWSH -u FULL MTD_OUT="$O/clock365" MTD_CLOCK_AHEAD_DAYS=365 NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $D/tools/clockahead.js" "$D/runall.sh") > "$O/_clock365_run.txt" 2>&1
+  (env -u PWSH -u FULL MTD_OUT="$O/clock365" MTD_CLOCK_AHEAD_DAYS=365 NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require \"$D/tools/clockahead.js\"" "$D/runall.sh") > "$O/_clock365_run.txt" 2>&1
   { grep -q '^VERDICT: PASS' "$O/_clock365_run.txt" && echo "PASS every suite passes with the clock 365 days ahead ($(grep -c '^== ' "$O/_clock365_run.txt") suites)"
     grep -E '^(UNEXPECTED|GUARD|STALE ENTRY|BAD ENTRY)|CRASHED' "$O/_clock365_run.txt" | sed 's/^/FAIL clock +365 days: /'
     grep -q '^VERDICT:' "$O/_clock365_run.txt" || echo "FAIL clock +365 days: runall printed no VERDICT"; } > "$O/clock365.txt"
@@ -145,6 +154,23 @@ for s in suites:
     h = hashlib.sha256('\n'.join(lines).encode()).hexdigest()
     if h in seen: bad.append(f'GUARD suites {seen[h]} and {s} report identical results (duplicate suite?)')
     else: seen[h] = s
+# M109 (seeded from MailToDrive L109): a suite whose assertion COUNT depends on the date is a time bomb too, even while it
+# passes (a check that adds itself on some days). The FULL clock reruns (clock90, clock365) must give every suite of this
+# run the same PASS/FAIL/RISK counts; a suite a rerun dropped fails. Not compared: suites whose shape the nested run changes
+# on purpose (deploy: no PowerShell there; the type check; the reruns themselves). A project adds its own such suites here.
+def _cnt(d, s):
+    t = open(os.path.join(d, s + '.txt'), encoding='utf-8', errors='replace').read()
+    return (len(re.findall(r'^ *PASS', t, re.M)), len(re.findall(r'^ *(?:FAIL|BUG|LEAK) ', t, re.M)), len(re.findall(r'^ *RISK', t, re.M)))
+_NOCMP = {'deploy', 'typecheck', 'clock90', 'clock365'}
+for _cd, _days in (('clock90', 90), ('clock365', 365)):
+    _cs = os.path.join(O, _cd, '_suites.txt')
+    if not os.path.exists(_cs): continue
+    _rs = [l.strip() for l in open(_cs) if l.strip()]
+    for s in suites:   # this run's suites: one the rerun dropped is reported, not skipped
+        if s in _NOCMP or s.endswith('.typecheck'): continue
+        if s not in _rs or not os.path.exists(os.path.join(O, _cd, s + '.txt')): bad.append(f'GUARD suite {s} did not run in the clock {_days} days ahead rerun (M109)'); continue
+        a, b = _cnt(O, s), _cnt(os.path.join(O, _cd), s)
+        if a != b: bad.append(f'GUARD suite {s} gives other counts with the clock {_days} days ahead (PASS/FAIL/RISK {a} -> {b}): an assertion depends on the date (M109)')
 # L106: a count written by hand must equal the count of what it names. README "lists N mistake classes: A from the source
 # project and B found here" is checked against tests/LESSONS.md rows (seeded: below L100 or M-numbered; this project's own: L100 and up).
 _rd, _lf = os.path.join(D, 'README.md'), os.path.join(D, 'tests', 'LESSONS.md')

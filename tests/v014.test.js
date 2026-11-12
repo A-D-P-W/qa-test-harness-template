@@ -2,6 +2,7 @@
 // window. tools/clockahead.js moves every clock a suite can read; FULL runall reruns every suite 90 days ahead (suite clock90).
 // Ported from MailToDrive's tests/v3125.test.js (sections 1 and 2); section 3 drives the class on a small aging fixture.
 // tools/guard_selftest.sh runs the FULL rerun end to end on a planted aging test.
+// 0.1.6 (L110): the shim's path in NODE_OPTIONS is double-quoted (a path with a space split there).
 // Run: node tests/v014.test.js
 const fs = require('fs'), path = require('path'), os = require('os'), cp = require('child_process');
 const D = path.join(__dirname, '..'), SHIM = path.join(D, 'tools', 'clockahead.js');
@@ -28,7 +29,7 @@ const node = (args, env) => cp.spawnSync(process.execPath, args, { env: Object.a
 
 // 2. runall wiring: FULL runs the rerun once (not inside itself), MTD_OUT cannot point outside out/
 { const R = fs.readFileSync(path.join(D, 'runall.sh'), 'utf8');
-  ok(/if \[ -n "\$FULL" \] && \[ -z "\$\{MTD_CLOCK_AHEAD_DAYS:-\}" \]; then/.test(R) && /MTD_CLOCK_AHEAD_DAYS=90 NODE_OPTIONS="[^"]*--require \$D\/tools\/clockahead\.js"/.test(R) && /sum clock90 /.test(R),
+  ok(/if \[ -n "\$FULL" \] && \[ -z "\$\{MTD_CLOCK_AHEAD_DAYS:-\}" \]; then/.test(R) && /MTD_CLOCK_AHEAD_DAYS=90 NODE_OPTIONS="(?:[^"\\]|\\")*--require \\"\$D\/tools\/clockahead\.js\\""/.test(R) && /sum clock90 /.test(R),
     'runall.sh: FULL reruns every suite 90 days ahead as suite clock90, never nested inside itself');
   ok(/grep -q '\^VERDICT: PASS' "\$O\/_clock90_run\.txt"/.test(R) && /runall printed no VERDICT/.test(R), 'runall.sh: clock90 passes only on the nested VERDICT: PASS (a missing verdict fails)');
   const o = cp.spawnSync('bash', [path.join(D, 'runall.sh')], { env: Object.assign({}, process.env, { MTD_OUT: os.tmpdir() }), encoding: 'utf8', timeout: 20000 });

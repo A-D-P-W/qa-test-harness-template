@@ -6,8 +6,12 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.5';
+const VERSION = '0.1.6';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.6  2026-11-12  Synced from MailToDrive 3.12.8: runall's hang watchdog tools/watchdog.js (M106, M112); module
+ *                    GUARD (d), each contract guarantee [G<n>] cited by a contract test (M107); the FULL clock reruns must
+ *                    give every suite the same counts (M109); a bare Date() under tools/clockahead.js (M110). Found
+ *                    here: every path runall puts into NODE_OPTIONS is double-quoted (a path with a space split there, L110).
  * 0.1.5  2026-11-11  Synced from MailToDrive 3.12.6: FULL also reruns every suite 365 days ahead (suite clock365, M101).
  * 0.1.4  2026-11-11  Synced from MailToDrive: FULL reruns every suite 90 days ahead (tools/clockahead.js, suite clock90);
  *                    seeded lessons L85-L90, L98, L99 and M100 (MailToDrive L100+ rows seeded as M<n>); 3 module rows.

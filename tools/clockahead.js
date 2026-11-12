@@ -8,10 +8,16 @@
 const days = Number(process.env.MTD_CLOCK_AHEAD_DAYS);
 if (!(days > 0 && days <= 3660)) throw new Error('clockahead: MTD_CLOCK_AHEAD_DAYS must be 1..3660 (got ' + process.env.MTD_CLOCK_AHEAD_DAYS + ')');
 const off = days * 864e5, Real = Date;
-class Ahead extends Real {
-  constructor(...a) { if (a.length) super(...a); else super(Real.now() + off); }
-  static now() { return Real.now() + off; }
+// M110 (seeded from MailToDrive L110): a function, not a class. A class cannot be called without `new`, so a bare Date()
+// threw (real Date() returns the current time as a string). Called: the shifted time's string. Constructed (also by a
+// subclass): a real Date.
+function Ahead(...a) {
+  if (!new.target) return new Real(Real.now() + off).toString();
+  return Reflect.construct(Real, a.length ? a : [Real.now() + off], new.target === Ahead ? Real : new.target);
 }
+Object.setPrototypeOf(Ahead, Real);                 // Date.parse, Date.UTC, … unchanged
+Ahead.prototype = Real.prototype;                   // instanceof Date, Date.prototype methods unchanged
+Ahead.now = function now() { return Real.now() + off; };
 globalThis.Date = Ahead;
 const vm = require('vm'), cc = vm.createContext, rn = vm.runInNewContext;
 const give = o => { if (o && typeof o === 'object' && !Object.prototype.hasOwnProperty.call(o, 'Date')) o.Date = Ahead; return o; };
