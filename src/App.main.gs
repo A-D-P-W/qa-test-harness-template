@@ -6,8 +6,11 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.6';
+const VERSION = '0.1.7';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.7  2026-11-12  Synced from MailToDrive 3.12.9 (its 2026-11-12 reviews): runall exits 2 on MTD_CLOCK_AHEAD_DAYS without
+ *                    the shim (M116), a CHANGELOG version listed twice is a GUARD (M115), guards.js and v368 require the
+ *                    pinned acorn (M118); seeded M114-M116, M118.
  * 0.1.6  2026-11-12  Synced from MailToDrive 3.12.8: runall's hang watchdog tools/watchdog.js (M106, M112); module
  *                    GUARD (d), each contract guarantee [G<n>] cited by a contract test (M107); the FULL clock reruns must
  *                    give every suite the same counts (M109); a bare Date() under tools/clockahead.js (M110). Found

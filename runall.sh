@@ -11,6 +11,9 @@
 # Writes out/ (untracked; safe to delete).
 D=$(cd "$(dirname "$0")" && pwd); O=${MTD_OUT:-$D/out}
 case "$O" in "$D/out"|"$D/out/"*) ;; *) echo "runall: MTD_OUT must be inside $D/out (got '$O')"; exit 2 ;; esac   # M100: nested clock-ahead run
+# M116: MTD_CLOCK_AHEAD_DAYS switches the clock reruns off; set without the shim (an exported leftover), a FULL run skipped
+# both and still ended VERDICT: PASS in the source project.
+case "${NODE_OPTIONS:-}" in *"$D/tools/clockahead.js"*) ;; *) [ -n "${MTD_CLOCK_AHEAD_DAYS:-}" ] && { echo "runall: MTD_CLOCK_AHEAD_DAYS is set only by runall's own clock-ahead reruns (unset it)"; exit 2; } ;; esac
 export TZ=${TZ:-America/Los_Angeles}
 # M106/M112 (seeded from MailToDrive L106/L112): every node suite runs under the hang watchdog (tools/watchdog.js): a suite
 # silent for MTD_WATCHDOG_S seconds prints a FAIL line naming its last output and is killed (CRASHED), instead of hanging
@@ -206,6 +209,11 @@ for _pn, _pd, _po, _ps in _projects:
     elif _c.group(1) != _v.group(1): bad.append(f'GUARD {_pn} VERSION {_v.group(1)} != top CHANGELOG line {_c.group(1)} (every version gets its CHANGELOG entry)')
     elif _c.group(2) == '(dev)' and _br == 'main': bad.append(f'GUARD {_pn} CHANGELOG {_c.group(1)} is dated (dev) on main: replace it with the release date and rebuild the bundle (CLAUDE.md § Release)')
     elif _c.group(2) == '(dev)': print(f'NOTICE: {_pn} CHANGELOG {_c.group(1)} is dated (dev) — replace it with the release date before merging to main')
+    # M115: every version once, newest first (two parallel agent sessions shipped the same version in the source project)
+    _cb = re.search(r"/\* CHANGELOG[^\n]*\n([\s\S]*?)\*/", _src)
+    _vs = [tuple(map(int, _m.group(1).split('.'))) for _l in (_cb.group(1).split('\n') if _cb else []) for _m in [re.match(r'^ \* (\d+\.\d+\.\d+)\s', _l)] if _m]
+    for _a, _z in zip(_vs, _vs[1:]):
+        if not _a > _z: bad.append(f'GUARD {_ps} CHANGELOG lists {".".join(map(str, _z))} after {".".join(map(str, _a))}: every version once, newest first (a reused version number)')
 print(f"\nallowed (deployed design or known-open): {len(fails) - n_unexp}")
 for b in bad: print(b)
 print('VERDICT:', 'PASS - no regressions' if not bad else f'REGRESSION - {len(bad)} problem(s)')

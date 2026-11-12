@@ -15,6 +15,9 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? pass++ : fa
 // whole file, but the alias, chain and L100 checks cannot run: that is a FAIL in every mode (L107).
 let reach = src, ACORN = null, EXBODIES = [];
 try { const acorn = require(process.env.MTD_ACORN || path.join(process.env.MTD_TC_CACHE || path.join(require('os').homedir(), '.cache', 'mtd-tc'), 'node_modules', 'acorn'));
+      // M118: the parser is the pinned one (a tool cache another project's lockfile filled can hold another acorn)
+      { const pj = path.join(__dirname, 'typecheck', 'package.json'), pin = fs.existsSync(pj) ? (JSON.parse(fs.readFileSync(pj, 'utf8')).devDependencies || {}).acorn : null;
+        if (pin) ok(acorn.version === pin, 'the parser is the pinned acorn ' + pin + ' (loaded ' + acorn.version + '; a shared tool cache can hold another project\'s, M118)'); }
       // the project whose committed bundle SRC is (any other file, e.g. runall's file-mode copy → whole bundle)
       let root = path.dirname(path.resolve(SRC)); while (!fs.existsSync(path.join(root, 'deploy')) && path.dirname(root) !== root) root = path.dirname(root);   // the repo SRC belongs to
       const rel = path.relative(root, path.resolve(SRC)).split(path.sep).join('/');
