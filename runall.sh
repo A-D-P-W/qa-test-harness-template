@@ -12,6 +12,9 @@
 D=$(cd "$(dirname "$0")" && pwd); O=${MTD_OUT:-$D/out}
 case "$O" in "$D/out"|"$D/out/"*) ;; *) echo "runall: MTD_OUT must be inside $D/out (got '$O')"; exit 2 ;; esac   # M100: nested clock-ahead run
 export TZ=${TZ:-America/Los_Angeles}
+# The CI time-budget NOTICE (verdict step) needs the start time exported: a plain assignment never reaches the step. Kept
+# from an outer run (a clock rerun, a project's nested template check), so the whole run is timed.
+MTD_RUNALL_T0=${MTD_RUNALL_T0:-$(date +%s)}; export MTD_RUNALL_T0
 # M106/M112 (seeded from MailToDrive L106/L112): every node suite runs under the hang watchdog (tools/watchdog.js): a suite
 # silent for MTD_WATCHDOG_S seconds prints a FAIL line naming its last output and is killed (CRASHED), instead of hanging
 # the run with no FAIL line. 180 s, not a limit set from local timings: a slower CI runner must not kill a healthy suite
@@ -78,7 +81,7 @@ if [ -n "$FULL" ] && [ -z "${MTD_CLOCK_AHEAD_DAYS:-}" ]; then
 fi
 # Verdict: every FAIL/BUG/LEAK/RISK line must equal an allowance entry; every entry must match; guards must hold.
 python3 - "$O" "$D" <<'PY'
-import sys, os, re, glob, hashlib, subprocess, json
+import sys, os, re, glob, hashlib, subprocess, json, time
 O, D = sys.argv[1], sys.argv[2]
 # newline='\n': a bare \r inside a FAIL line (Windows tool output) must not split it into a line with no [suite] (L102)
 fails = [l.rstrip('\r\n').replace('\r', '\\r') for l in open(os.path.join(O, '_fails.txt'), encoding='utf-8', errors='replace', newline='\n') if l.strip()]
@@ -206,6 +209,17 @@ for _pn, _pd, _po, _ps in _projects:
     elif _c.group(1) != _v.group(1): bad.append(f'GUARD {_pn} VERSION {_v.group(1)} != top CHANGELOG line {_c.group(1)} (every version gets its CHANGELOG entry)')
     elif _c.group(2) == '(dev)' and _br == 'main': bad.append(f'GUARD {_pn} CHANGELOG {_c.group(1)} is dated (dev) on main: replace it with the release date and rebuild the bundle (CLAUDE.md § Release)')
     elif _c.group(2) == '(dev)': print(f'NOTICE: {_pn} CHANGELOG {_c.group(1)} is dated (dev) — replace it with the release date before merging to main')
+# Ported from MailToDrive 3.12.14 (its owner decision 2026-11-13, after its FULL CI run hit the job's limit twice): on CI, a
+# FULL run that uses more than 80% of the runall job's timeout-minutes (.github/workflows/tests.yml) prints a NOTICE, so the
+# run is trimmed or the limit raised before a limit hit cancels a release run. The clock reruns run without FULL, so only
+# the outer run prints it. Not counted: the job's steps before runall.sh starts (checkout, setup).
+if os.environ.get('GITHUB_ACTIONS') and os.environ.get('FULL') == '1' and os.environ.get('MTD_RUNALL_T0', '').isdigit():
+    try:
+        _wf = open(os.path.join(D, '.github', 'workflows', 'tests.yml'), encoding='utf-8').read()
+        _lim = int(re.search(r'\n  runall:\n(?:(?:    [^\n]*)?\r?\n)*?    timeout-minutes: ["\']?(\d+)', _wf).group(1))
+        _el = int(time.time()) - int(os.environ['MTD_RUNALL_T0'])
+        if _el > 0.8 * _lim * 60: print(f'NOTICE: CI time budget: this FULL run took {_el // 60} min of the runall job\'s {_lim}-minute limit (over 80%): trim the slowest suites or raise the limit')
+    except Exception as e: print(f'NOTICE: CI time budget: could not read the runall job limit ({e})')
 print(f"\nallowed (deployed design or known-open): {len(fails) - n_unexp}")
 for b in bad: print(b)
 print('VERDICT:', 'PASS - no regressions' if not bad else f'REGRESSION - {len(bad)} problem(s)')

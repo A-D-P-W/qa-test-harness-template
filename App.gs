@@ -9,8 +9,11 @@
  */
 
 // ===================== VERSION =====================
-const VERSION = '0.1.7';
+const VERSION = '0.1.8';
 /* CHANGELOG (newest first; the full record is this list, git history and tests/LESSONS.md)
+ * 0.1.8  2026-11-15  Ported from MailToDrive: tools/review_count.py also counts origin/main when HEAD does not contain it,
+ *                    with a NOTICE that the checkout is stale or diverged (M126); runall prints `NOTICE: CI time budget`
+ *                    when a FULL CI run uses more than 80% of the runall job's timeout-minutes (MailToDrive 3.12.14).
  * 0.1.7  2026-11-12  Synced from MailToDrive 3.12.10's review fixes: v368 also checks calls with a scope too weak for them
  *                    (M115); deploy-windows runs under PowerShell 7 and Windows PowerShell 5.1 (M116); the GUARD (d) docs say
  *                    the guard accepts any string, normally an assertion's name.

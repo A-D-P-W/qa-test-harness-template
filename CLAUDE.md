@@ -28,7 +28,7 @@
   (mocks hid three live-only bugs in MailToDrive, L4). Any new parser of untrusted input gets linear-time + fuzz checks (L5).
 - Every change to the code, a module or shared tooling bumps `VERSION`, adds a CHANGELOG line
   at the top of the `/* CHANGELOG` block in `src/App.main.gs` (`<version>  <date or (dev)>  <change>`) and a
-  `tests/v<VERSION without dots>.test.js` (0.1.7: `tests/v017.test.js`), then `node tools/bundle.js`.
+  `tests/v<VERSION without dots>.test.js` (0.1.8: `tests/v018.test.js`), then `node tools/bundle.js`.
 - Every bug fix adds a guard for the bug's CLASS (a test or a runall GUARD), not only the case, plus a row in
   `tests/LESSONS.md` with its evidence. Lessons without evidence are not kept.
 - Rerun all suites (`./runall.sh`) after any change, and `FULL=1 ./runall.sh` before every push (L57).
@@ -72,7 +72,9 @@
   `runall` = success on that SHA (`GET /repos/<owner>/<repo>/commits/<sha>/check-runs`); `git merge --ff-only` to main (not a
   fast-forward: rebase, rerun FULL=1); push main; re-read the rulesets (docs/RULESETS.md: 'main' + 'release tags' active, no
   bypass, 'main' requires `runall`).
-  CI turns every `NOTICE` line into a check-run warning; read them before merging.
+  CI turns every `NOTICE` line into a check-run warning; read them before merging. `NOTICE: CI time budget` means the FULL
+  run used more than 80% of the `runall` job's `timeout-minutes`: trim the slowest suites or raise the limit before a release
+  run is cancelled at it.
 - Owner, on the PC in the repo folder: `git pull; powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy.ps1 -Release <sha>`
   (`-DryRun` alone first if unsure; `clasp login` first unless the owner set `KEEP_CLASP_LOGIN=1`). It STOPs unless the checkout
   is clean main == origin/main, `<sha>` is HEAD, `.clasp.json` names the pinned project, clasp is exactly 3.4.1 and would upload
@@ -92,7 +94,9 @@
 
 ## Workflow-integrity review
 - runall prints `NOTICE: WORKFLOW REVIEW DUE` when commits touching the paths in `tests/workflow_review.json` since its
-  `last_review_commit` reach 8 commits or 400 added lines. When it shows, dispatch the workflow-integrity reviewer and its QA
+  `last_review_commit` reach 8 commits or 400 added lines. When HEAD does not contain `origin/main` (as of the last fetch), it
+  also counts `origin/main`, the count nearer its threshold decides, and a NOTICE says the checkout is stale or diverged: fetch,
+  then rebase or pull (M126). When it shows, dispatch the workflow-integrity reviewer and its QA
   tester before the next release (gaps, conflicting rules, stale additions, never-run tests, docs that disagree with the
   scripts); fix or surface findings, then set `last_review_commit` to the last commit the review covered, in a commit of its own.
 - Reviews so far: <one line per review, oldest first: date, the commits it covered (`<first>..<last>`), its findings by

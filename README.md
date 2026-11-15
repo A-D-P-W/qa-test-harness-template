@@ -34,7 +34,7 @@ line. CI (`.github/workflows/tests.yml`) chooses between the two commands from t
 |---|---|
 | `typecheck` | Calls to Apps Script members that do not exist, checked against Google's published types (`tests/typecheck/`, typescript and @types/google-apps-script pinned by integrity hash). Mocks cannot catch this. |
 | `v368` (scope map) | Code that calls an Apps Script service whose OAuth scope is missing from `appsscript.json`. The check walks the AST of the code the project can reach, so aliasing (`const A = DriveApp`) and optional chaining are covered, and the alias and chain checks are driven with example forms on every run. Without its parser the suite fails in every mode (L107). Any service with no row in its NEEDS table fails, and every run checks each row against a sample call (L105), because the template's own code calls no service. Code that reaches a service without naming it (the global object, `Reflect`, `eval`/`Function`, `this[...]`, `.constructor`, property-descriptor lookups) fails too, and every run re-checks that rule against every known bypass form and a set of legitimate forms, and prints both counts (L100). Four review rounds each found new bypasses, and a name produced by running code (for example `['constr', 'uctor'].join('')`) is a documented residual. It is a lint against accidental omissions, not a sandbox: the manifest is what Google enforces at run time. |
-| `v010` | The example project's own tests. Each version adds a `tests/v<VERSION without dots>.test.js` (0.1.7: `tests/v017.test.js`). |
+| `v010` | The example project's own tests. Each version adds a `tests/v<VERSION without dots>.test.js` (0.1.8: `tests/v018.test.js`). |
 | `deploy` | `deploy.ps1`, the only release path, tested against real git repositories and a fake `clasp` CLI. The fake is modelled on the source of clasp 3.4.1. Each test asserts which stage stopped the release, not only that it stopped. |
 | `guards` (`tools/guards.js`) | Module rules, checked on the AST: a module reads no consumer globals and calls only the services its contract lists; every consumer has a contract test; module versions are immutable once released; every guarantee in a contract carries an ID `[G<n>]` that a contract test cites as `[<Module>.G<n>]` in a string, normally an assertion's name, not in a comment (GUARD (d), M107; the guard does not check that the string names an assertion). |
 | `clock90`, `clock365` (FULL only) | A test fixture with a fixed date that passes today and fails once the date ages out of a lookback window. FULL reruns every suite twice with every clock a suite can read (`Date.now()`, `new Date()`, a bare `Date()`, vm sandboxes) moved ahead by `tools/clockahead.js`: 90 days, then 365 days, so a fixture fails up to a year early (M100, M101, M110, seeded from the source project). Each rerun must also give every suite the same PASS/FAIL/RISK counts as the run itself, so a check that adds itself on some days fails too (M109). |
@@ -65,7 +65,7 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
 - **One verdict.** Every suite feeds one line. A failure is either listed in `tests/expected_deployed.txt` or
   `tests/known_open.txt` as `<suite> | <exact line>` with an owner's OK, or the run fails. An entry that no longer matches
   anything also fails the run, so the list of allowed failures cannot quietly rot.
-- **Lessons become guards.** `tests/LESSONS.md` lists 109 mistake classes: 98 from the source project and 11 found here. Each row gives its
+- **Lessons become guards.** `tests/LESSONS.md` lists 110 mistake classes: 99 from the source project and 11 found here. Each row gives its
   evidence (what happened, when, how it was found) and the check that now catches it. A bug fix adds a guard for the
   bug's class, not only the case. Many rows are about the tests themselves: a mock that dropped an argument, a fuzz
   generator that lost float precision, a mutant that looped forever and was counted as killed. Most of those checks are
@@ -83,7 +83,11 @@ path with a space next to a canary folder (L104). CI runs shellcheck on every tr
   then approve; a weekly digest with at most one alert a day; fail closed on trust and privacy checks.
 - **Review is triggered by size.** `tools/review_count.py` prints `WORKFLOW REVIEW DUE` after 8 commits or 400 added lines
   in workflow files since the last review. Many small additions to a test workflow create gaps and conflicts that no single
-  review sees (L10).
+  review sees (L10). When the checkout's HEAD does not contain `origin/main` (as of the last fetch), it prints a NOTICE that
+  the checkout is stale or diverged and also counts `origin/main`; the count nearer its threshold decides, so a stale local
+  branch cannot read "not due" (M126).
+- **The CI limit is watched.** On CI, a FULL run that uses more than 80% of the `runall` job's `timeout-minutes` prints
+  `NOTICE: CI time budget`, so the run is trimmed or the limit raised before a release run is cancelled at the limit.
 
 ## Files
 
