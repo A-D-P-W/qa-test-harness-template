@@ -7,8 +7,8 @@ how it was found, why it matters, what changed.
 
 **What happened**
 MailToDrive is designed to organize important files that I'd want to catalog, archive and store.
-It matters to vet the source, to ensure we do not have any security holes with injection attacks
-that might be hiding in PDFs or other files.
+It matters to vet the source: a file should only be trusted if it really comes from who it says
+it's from.
 
 Record: the check that decided whether a mail came from a trusted sender read a header that, on
 one mail path, the sender could write themselves.
@@ -35,14 +35,14 @@ the system, how would they approach it? If the system produced a report about a 
 does it contain the information needed to act and patch the exploit? If we did a mock run of the
 system in action, what would that look like?
 
-I imagine this is how the gap was found.
+That's how this gap was found: the Gmail expert's review caught it.
 
 Record: the Gmail-domain expert review found it (RISK D11, review 2026-10-20; tests/LESSONS.md L14).
 
 **Why it matters**
-A file containing malicious code could have had a wide variety of negative impacts on my computer.
-I am not sure how bad it might have been, and that is why I am diligent about anything involving
-external files being stored locally or in my cloud drives that I might need to access.
+Someone could have sent a mail that looked like it came from a sender I trust, and its files would
+have been filed as genuine. That is why I am diligent about anything involving external files being
+stored locally or in my cloud drives that I might need to access.
 
 **What changed**
 If an agent's recommendation reads logically to me and I understand why it's being recommended,
